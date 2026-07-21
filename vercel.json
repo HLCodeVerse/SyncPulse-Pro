@@ -1,6 +1,5 @@
 {
-  "framework": "nextjs",
-  "buildCommand": "pnpm build",
-  "installCommand": "pnpm install",
+  "buildCommand": "npm --prefix packages/types run build && npm --prefix packages/webrtc-sdk run build && npm --prefix packages/ui run build && npm --prefix apps/web run build",
+  "installCommand": "npm install",
   "outputDirectory": "apps/web/.next"
 }

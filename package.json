@@ -14,7 +14,9 @@
     "typecheck": "npm run --workspaces --if-present typecheck"
   },
   "dependencies": {
-    "next": "14.2.24"
+    "next": "14.2.24",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
   },
   "devDependencies": {
     "next": "14.2.24",

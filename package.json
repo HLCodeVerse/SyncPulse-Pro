@@ -14,12 +14,19 @@
     "typecheck": "npm run --workspaces --if-present typecheck"
   },
   "dependencies": {
+    "clsx": "^2.1.1",
+    "framer-motion": "^12.4.7",
+    "lucide-react": "^0.475.0",
     "next": "14.2.24",
     "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "react-dom": "^18.3.1",
+    "styled-jsx": "^5.1.6",
+    "tailwind-merge": "^3.0.1"
   },
   "devDependencies": {
-    "next": "14.2.24",
+    "@types/node": "^22.10.10",
+    "@types/react": "^18.3.18",
+    "@types/react-dom": "^18.3.5",
     "typescript": "^5.7.3"
   }
 }

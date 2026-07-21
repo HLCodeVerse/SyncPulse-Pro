@@ -13,6 +13,9 @@
     "build": "npm --prefix packages/types run build && npm --prefix packages/webrtc-sdk run build && npm --prefix apps/signaling run build && npm --prefix apps/web run build",
     "typecheck": "npm run --workspaces --if-present typecheck"
   },
+  "dependencies": {
+    "next": "14.2.24"
+  },
   "devDependencies": {
     "next": "14.2.24",
     "typescript": "^5.7.3"

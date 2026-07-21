@@ -1,5 +1,5 @@
 {
-  "name": "webrtc-platform",
+  "name": "syncpulse-pro",
   "version": "1.0.0",
   "private": true,
   "packageManager": "npm@10.8.2",
@@ -8,9 +8,9 @@
     "packages/*"
   ],
   "scripts": {
-    "dev:signaling": "npm --prefix apps/signaling run dev",
-    "dev:web": "npm --prefix apps/web run dev",
-    "build": "npm --prefix packages/types run build && npm --prefix packages/webrtc-sdk run build && npm --prefix apps/signaling run build && npm --prefix apps/web run build",
+    "dev": "npm --prefix apps/web run dev",
+    "build": "npm --prefix packages/types run build && npm --prefix packages/webrtc-sdk run build && npm --prefix packages/ui run build && npm --prefix apps/web run build",
+    "start": "npm --prefix apps/web run start",
     "typecheck": "npm run --workspaces --if-present typecheck"
   },
   "dependencies": {

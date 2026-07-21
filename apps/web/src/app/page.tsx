@@ -990,15 +990,55 @@ export default function Home() {
 
           <div className="flex-1 overflow-y-auto p-4 md:p-8">
             <div className="max-w-xl mx-auto space-y-6">
+              {/* Appearance */}
               <div className="p-5 rounded-2xl space-y-3" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
-                <h3 className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--text-secondary)' }}>Appearance</h3>
+                <h3 className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--text-secondary)' }}>Appearance Theme</h3>
                 <div className="grid grid-cols-4 gap-2">
                   {THEMES.map((t) => (
-                    <button key={t.key} onClick={() => setTheme(t.key)} className="flex flex-col items-center gap-2 p-3 rounded-xl" style={{ background: theme === t.key ? 'var(--accent-dim)' : 'var(--bg-elevated)', border: `2px solid ${theme === t.key ? 'var(--accent)' : 'transparent'}` }}>
+                    <button key={t.key} onClick={() => setTheme(t.key)} className="flex flex-col items-center gap-2 p-3 rounded-xl transition-all hover:scale-105" style={{ background: theme === t.key ? 'var(--accent-dim)' : 'var(--bg-elevated)', border: `2px solid ${theme === t.key ? 'var(--accent)' : 'transparent'}` }}>
                       <div className="w-6 h-6 rounded-full" style={{ background: t.dot }} />
                       <span className="text-[10px] font-semibold" style={{ color: theme === t.key ? 'var(--accent)' : 'var(--text-muted)' }}>{t.label}</span>
                     </button>
                   ))}
+                </div>
+              </div>
+
+              {/* 🔌 No-Code Integration Generator */}
+              <div className="p-5 rounded-2xl space-y-4" style={{ background: 'var(--bg-surface)', border: '1px solid var(--accent)' }}>
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-bold uppercase tracking-wider flex items-center gap-1.5" style={{ color: 'var(--accent)' }}>
+                    <Zap size={14} /> 🔌 Zero-Code Integration Generator
+                  </h3>
+                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full" style={{ background: 'var(--accent-dim)', color: 'var(--accent)' }}>Non-Coder Ready</span>
+                </div>
+                <p className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                  Paste this 1-line HTML code anywhere into WordPress, Shopify, Webflow, React, or any HTML website to add instant chat & calling.
+                </p>
+
+                {/* Snippet Option 1: 1-Line Script */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-[11px] font-semibold" style={{ color: 'var(--text-primary)' }}>
+                    <span>1️⃣ Floating Action Widget (1-Line HTML)</span>
+                  </div>
+                  <div className="p-3 rounded-xl font-mono text-[11px] flex items-center justify-between gap-2 overflow-x-auto" style={{ background: 'var(--bg-app)', border: '1px solid var(--border)' }}>
+                    <code className="text-blue-400 flex-1 truncate">&lt;script src="https://syncpulse-pro.vercel.app/widget.js"&gt;&lt;/script&gt;</code>
+                    <button type="button" onClick={() => { navigator.clipboard.writeText('<script src="https://syncpulse-pro.vercel.app/widget.js"></script>'); alert('Copied 1-line HTML Widget snippet!'); }} className="app-btn app-btn-primary px-3 py-1 text-[10px] shrink-0">
+                      Copy HTML
+                    </button>
+                  </div>
+                </div>
+
+                {/* Snippet Option 2: iFrame Embed */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-[11px] font-semibold" style={{ color: 'var(--text-primary)' }}>
+                    <span>2️⃣ Full Page iFrame Embed</span>
+                  </div>
+                  <div className="p-3 rounded-xl font-mono text-[11px] flex items-center justify-between gap-2 overflow-x-auto" style={{ background: 'var(--bg-app)', border: '1px solid var(--border)' }}>
+                    <code className="text-emerald-400 flex-1 truncate">&lt;iframe src="https://syncpulse-pro.vercel.app?embed=true" width="100%" height="700px"&gt;&lt;/iframe&gt;</code>
+                    <button type="button" onClick={() => { navigator.clipboard.writeText('<iframe src="https://syncpulse-pro.vercel.app?embed=true" width="100%" height="700px" style="border:none;border-radius:16px;"></iframe>'); alert('Copied iFrame Embed snippet!'); }} className="app-btn app-btn-ghost px-3 py-1 text-[10px] shrink-0" style={{ background: 'var(--bg-hover)', color: 'var(--text-primary)' }}>
+                      Copy iFrame
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>

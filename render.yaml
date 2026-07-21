@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: webrtc-signaling-server
+    env: node
+    plan: free
+    rootDir: apps/signaling
+    buildCommand: npm install && npm run build
+    startCommand: node dist/server.js
+    envVars:
+      - key: PORT
+        value: 4000
+      - key: NODE_ENV
+        value: production
+      - key: REQUIRE_AUTH
+        value: "false"
+    healthCheckPath: /health

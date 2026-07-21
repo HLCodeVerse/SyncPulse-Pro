@@ -25,6 +25,15 @@
     "paths": {
       "@/*": [
         "./src/*"
+      ],
+      "@webrtc/types": [
+        "../../packages/types/src/index.ts"
+      ],
+      "@webrtc/sdk": [
+        "../../packages/webrtc-sdk/src/index.ts"
+      ],
+      "@webrtc/ui": [
+        "../../packages/ui/src/index.ts"
       ]
     }
   },

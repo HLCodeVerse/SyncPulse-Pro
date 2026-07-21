@@ -1,5 +1,7 @@
 {
-  "buildCommand": "npm --prefix packages/types run build && npm --prefix packages/webrtc-sdk run build && npm --prefix packages/ui run build && npm --prefix apps/web run build",
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "nextjs",
   "installCommand": "npm install",
+  "buildCommand": "npm run build",
   "outputDirectory": "apps/web/.next"
 }

@@ -552,6 +552,31 @@ export default function Home() {
     return () => clearInterval(interval);
   }, [selectedContact, registeredUser]);
 
+  const soundEnabledRef = useRef(soundEnabled);
+  useEffect(() => {
+    soundEnabledRef.current = soundEnabled;
+  }, [soundEnabled]);
+
+  const activeRoomIdRef = useRef(activeRoomId);
+  useEffect(() => {
+    activeRoomIdRef.current = activeRoomId;
+  }, [activeRoomId]);
+
+  const registeredUserRef = useRef(registeredUser);
+  useEffect(() => {
+    registeredUserRef.current = registeredUser;
+  }, [registeredUser]);
+
+  /* Dedicated Effect to Connect and Register on Login/Session Restore */
+  useEffect(() => {
+    if (registeredUser && sigRef.current) {
+      if (!(sigRef.current as any).socket?.connected) {
+        sigRef.current.connect();
+      }
+      sigRef.current.register(registeredUser as any);
+    }
+  }, [registeredUser]);
+
   /* Signaling Listeners */
   useEffect(() => {
     const sig = new SignalingClient({ url: SIGNALING_URL, autoConnect: false });
@@ -563,11 +588,6 @@ export default function Home() {
       onNetworkQualityReport: (_, st) => setNetworkQuality({ quality: st.quality, rttMs: st.rttMs, bitrateKbps: st.bitrateKbps }),
     });
     pmRef.current = pm;
-
-    if (registeredUser) {
-      sig.connect();
-      sig.register(registeredUser as any);
-    }
 
     sig.on('registered', (u) => setRegisteredUser(u as any));
     sig.on('presence:update', (u) => setOnlineUsers(u));
@@ -587,12 +607,12 @@ export default function Home() {
         return [...prev, { ...msg, status: 'delivered' }];
       });
 
-      if (activeRoomId) {
+      if (activeRoomIdRef.current) {
         setInCallChatToast({ senderName: msg.sender.name, text: msg.text });
         setTimeout(() => setInCallChatToast(null), 4000);
       }
 
-      if (soundEnabled) playSound('message');
+      if (soundEnabledRef.current) playSound('message');
     });
 
     sig.on('chat:updated', ({ messageId, message }) => {
@@ -620,7 +640,7 @@ export default function Home() {
     sig.on('call:incoming', (payload) => {
       setIncomingCall(payload);
       showBackgroundCallNotification(payload.caller.name, payload.isVideo);
-      if (soundEnabled) playSound('ring');
+      if (soundEnabledRef.current) playSound('ring');
     });
 
     sig.on('call:accepted', ({ roomId }) => {
@@ -647,7 +667,7 @@ export default function Home() {
         if (prev.some(u => u.id === from.id)) return prev;
         return [...prev, from];
       });
-      if (soundEnabled) playSound('notification');
+      if (soundEnabledRef.current) playSound('notification');
     });
 
     sig.on('friend:accept', ({ from }) => {
@@ -655,7 +675,7 @@ export default function Home() {
       setFriendProfiles((prev) => ({ ...prev, [from.id]: from }));
       setSentRequests((prev) => prev.filter(id => id !== from.id));
       setBusyNotice(`🎉 ${from.name} accepted your friend request!`);
-      if (soundEnabled) playSound('notification');
+      if (soundEnabledRef.current) playSound('notification');
       setTimeout(() => setBusyNotice(null), 4000);
     });
 
@@ -665,11 +685,11 @@ export default function Home() {
 
     sig.on('call:invite', ({ roomId, inviter, isVideo }) => {
       setIncomingCall({ roomId, caller: inviter, isVideo, callType: 'group' });
-      if (soundEnabled) playSound('ring');
+      if (soundEnabledRef.current) playSound('ring');
     });
 
     return () => { pm.closeAll(); sig.disconnect(); };
-  }, [soundEnabled, activeRoomId, registeredUser]);
+  }, []);
 
   /* Actions */
   const handleLogout = () => {

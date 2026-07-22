@@ -1,4 +1,4 @@
-const apiKey = 'AIzaSyD1uwO-OvXHVeOo7EdWfnIMncSia8fWsPM';
+const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY || '';
 
 export async function askGeminiWithThreadContext(
   userPrompt: string,
@@ -17,7 +17,7 @@ export async function askGeminiWithThreadContext(
 
     const fullPrompt = `${systemInstruction}\n\nRecent Chat Context:\n${formattedHistory}\n\nCurrent Query: "${userPrompt}"\n\nProvide a helpful 1-3 sentence response:`;
 
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${apiKey}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

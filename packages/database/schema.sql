@@ -77,12 +77,12 @@ CREATE TABLE IF NOT EXISTS public.room_participants (
 
 -- 6. MESSAGES TABLE
 CREATE TABLE IF NOT EXISTS public.messages (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  room_id UUID NOT NULL REFERENCES public.rooms(id) ON DELETE CASCADE,
+  id TEXT PRIMARY KEY,
+  room_id TEXT NOT NULL,
   sender_id UUID NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
   text TEXT NOT NULL,
   media_url TEXT,
-  reply_to_message_id UUID REFERENCES public.messages(id) ON DELETE SET NULL,
+  reply_to_message_id TEXT,
   reactions JSONB DEFAULT '[]'::jsonb,
   is_edited BOOLEAN DEFAULT FALSE,
   is_deleted BOOLEAN DEFAULT FALSE,

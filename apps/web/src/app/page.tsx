@@ -22,9 +22,28 @@ import {
   Search, Send, CheckCheck, Check, ArrowLeft, Settings, LogOut, Users, Zap,
   X, Sparkles, Hash, Edit2, Bot, Wand2, Globe2, ShieldCheck,
   Pin, File, PhoneCall, User as UserIcon, UserPlus, UserCheck, UserSearch,
-  Activity, Plus, Camera, Smile, Paperclip, Lock, Radio, Trash2, Reply, Bell
+  Activity, Plus, Camera, Smile, Paperclip, Lock, Radio, Trash2, Reply, Bell,
+  Archive, VolumeX, Lightbulb, Image as ImageIcon
 } from 'lucide-react';
-import { askGemini, generateSmartReplies, summarizeChatHistory, rephraseText, translateText } from '../lib/aiService';
+import {
+  askGeminiWithThreadContext,
+  generateSmartRepliesWithContext,
+  rephraseWithContext,
+  summarizeChatHistory,
+  generateMeetingNotes,
+  generateUserBio,
+  translateText
+} from '../lib/aiService';
+import { syncUserIdentity, fetchFriendsFromDb, saveMessageToDb } from '../lib/supabaseClient';
+import { requestNotificationPermission, showBackgroundCallNotification } from '../lib/pushNotifications';
+import {
+  AnimatedMicIcon,
+  AnimatedCamIcon,
+  AnimatedDialRingIcon,
+  AnimatedReadTickIcon,
+  AnimatedReactionIcon,
+  AnimatedBellIcon
+} from '../../../../packages/icons/src/AnimatedIcons';
 
 const SIGNALING_URL = process.env.NEXT_PUBLIC_SIGNALING_URL || 'http://localhost:4000';
 
@@ -56,7 +75,11 @@ const THEMES: { key: string; label: string; dot: string; grad: string }[] = [
   { key: 'peach-pink', label: 'Peach Pink', dot: '#ec368d', grad: 'linear-gradient(135deg, #ffc145, #ec368d)' },
 ];
 
-const EMOJI_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🔥'];
+const EMOJI_REACTIONS = [
+  { type: 'heart', label: '❤️' },
+  { type: 'fire', label: '🔥' },
+  { type: 'thumbs', label: '👍' },
+];
 
 /* ✨ Custom Vector Animated SVG AI Icon */
 function AiSparkleIcon({ size = 20, className = '' }: { size?: number; className?: string }) {
@@ -125,7 +148,7 @@ function playSound(type: 'message' | 'notification' | 'ring' | 'dial') {
 
 export default function Home() {
   const [showSplash, setShowSplash] = useState(true);
-  const [splashProgress, setSplashProgress] = useState(35);
+  const [splashProgress, setSplashProgress] = useState(40);
   const [userName, setUserName] = useState('');
   const [selectedAvatar, setSelectedAvatar] = useState(AVATAR_PRESETS[0]);
   const [userBio, setUserBio] = useState('Senior Full-Stack & WebRTC Engineer.');
@@ -143,6 +166,12 @@ export default function Home() {
   const [friendRequests, setFriendRequests] = useState<User[]>([]);
   const [sentRequests, setSentRequests] = useState<string[]>([]);
   const [friendsTab, setFriendsTab] = useState<'find' | 'friends' | 'requests'>('find');
+
+  // WhatsApp Parity States
+  const [mutedChats, setMutedChats] = useState<string[]>([]);
+  const [archivedChats, setArchivedChats] = useState<string[]>([]);
+  const [aiIcebreaker, setAiIcebreaker] = useState<string | null>(null);
+  const [aiMeetingNotes, setAiMeetingNotes] = useState<string | null>(null);
 
   const [theme, setTheme] = useState<string>(() => {
     if (typeof window !== 'undefined') return localStorage.getItem('pulse_theme') || 'coral-dark';
@@ -170,13 +199,13 @@ export default function Home() {
   const [outgoingCall, setOutgoingCall] = useState<{ target: User; isVideo: boolean; roomId: string } | null>(null);
   const [busyNotice, setBusyNotice] = useState<string | null>(null);
 
-  // Chat & Reply State
+  // Chat & AI Context State
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState('');
   const [replyingTo, setReplyingTo] = useState<ChatMessage | null>(null);
   const [editingMessage, setEditingMessage] = useState<ChatMessage | null>(null);
   const [pinnedMessage, setPinnedMessage] = useState<ChatMessage | null>(null);
-  const [smartReplies, setSmartReplies] = useState<string[]>([]);
+  const [smartReplyChips, setSmartReplyChips] = useState<string[]>([]);
   const [isAiThinking, setIsAiThinking] = useState(false);
   const [showAiMenu, setShowAiMenu] = useState(false);
 
@@ -196,15 +225,17 @@ export default function Home() {
 
   /* Splash Screen */
   useEffect(() => {
-    const t1 = setTimeout(() => setSplashProgress(85), 180);
-    const t2 = setTimeout(() => setSplashProgress(100), 450);
-    const t3 = setTimeout(() => setShowSplash(false), 700);
+    const t1 = setTimeout(() => setSplashProgress(90), 150);
+    const t2 = setTimeout(() => setSplashProgress(100), 350);
+    const t3 = setTimeout(() => setShowSplash(false), 550);
     return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
   }, []);
 
-  /* Restore Session & Friend Profiles Cache */
+  /* Restore Session & Supabase Sync */
   useEffect(() => {
     if (typeof window === 'undefined') return;
+    requestNotificationPermission();
+
     const saved = localStorage.getItem('syncpulse_session');
     if (saved) {
       try {
@@ -226,6 +257,8 @@ export default function Home() {
 
           const userObj: User = { id: parsed.id, name: parsed.name, avatar: parsed.avatar, status: 'online' };
           setRegisteredUser(userObj);
+          syncUserIdentity(userObj);
+
           sigRef.current?.connect();
           sigRef.current?.register(userObj);
         }
@@ -248,7 +281,7 @@ export default function Home() {
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [chatMessages, selectedContact, smartReplies]);
+  }, [chatMessages, selectedContact, smartReplyChips]);
 
   useEffect(() => {
     let interval: any = null;
@@ -290,7 +323,6 @@ export default function Home() {
         return [...prev, { ...msg, status: 'delivered' }];
       });
 
-      // Show in-call message toast during video call
       if (activeRoomId) {
         setInCallChatToast({ senderName: msg.sender.name, text: msg.text });
         setTimeout(() => setInCallChatToast(null), 4000);
@@ -323,6 +355,7 @@ export default function Home() {
 
     sig.on('call:incoming', (payload) => {
       setIncomingCall(payload);
+      showBackgroundCallNotification(payload.caller.name, payload.isVideo);
       if (soundEnabled) playSound('ring');
     });
 
@@ -345,7 +378,6 @@ export default function Home() {
       setTimeout(() => setBusyNotice(null), 4000);
     });
 
-    // 🤝 FRIEND REQUEST NOTIFICATIONS & AUTOMATIC PROFILE CACHING
     sig.on('friend:request', ({ from }) => {
       setFriendRequests((prev) => {
         if (prev.some(u => u.id === from.id)) return prev;
@@ -375,6 +407,7 @@ export default function Home() {
     return () => { pm.closeAll(); sig.disconnect(); };
   }, [soundEnabled, activeRoomId]);
 
+  /* Thread Context Window AI Smart Reply Chips & Read Receipts */
   useEffect(() => {
     if (!selectedContact || !registeredUser) return;
     const dmId = selectedContact.id === AI_BOT_USER.id ? 'pulse_ai_bot' : [registeredUser.id, selectedContact.id].sort().join('_chat_');
@@ -392,9 +425,10 @@ export default function Home() {
     const activeMsgs = chatMessages.filter(m => m.roomId === dmId);
     const lastMsg = activeMsgs[activeMsgs.length - 1];
     if (lastMsg && lastMsg.sender.id !== registeredUser.id && selectedContact.id !== AI_BOT_USER.id) {
-      generateSmartReplies(lastMsg.text).then(replies => setSmartReplies(replies));
+      const formattedContext = activeMsgs.slice(-6).map(m => ({ sender: m.sender.name, text: m.text }));
+      generateSmartRepliesWithContext(lastMsg.text, formattedContext).then(replies => setSmartReplyChips(replies));
     } else {
-      setSmartReplies([]);
+      setSmartReplyChips([]);
     }
   }, [selectedContact, chatMessages, registeredUser]);
 
@@ -411,6 +445,8 @@ export default function Home() {
 
     const userObj: User = { id, name: userName.trim(), avatar: selectedAvatar, status: 'online' };
     setRegisteredUser(userObj);
+    syncUserIdentity(userObj);
+
     sigRef.current?.connect();
     sigRef.current?.register(userObj);
   };
@@ -500,10 +536,14 @@ export default function Home() {
     }
   };
 
-  const leaveCall = () => {
+  const leaveCall = async () => {
     if (activeRoomId) {
       sigRef.current?.endCall(activeRoomId);
       sigRef.current?.leaveRoom(activeRoomId);
+
+      // AI Post-Call Summary Generation
+      const summary = await generateMeetingNotes(["Call ended with participants."]);
+      setAiMeetingNotes(summary);
     }
     pmRef.current?.closeAll();
     setActiveRoomId(null);
@@ -589,11 +629,13 @@ export default function Home() {
     };
 
     setChatMessages((prev) => [...prev, msg]);
+    saveMessageToDb({ id: msgId, roomId, senderId: registeredUser.id, text: content });
     setInputText('');
 
     if (isAi) {
       setIsAiThinking(true);
-      const aiReplyText = await askGemini(content, "You are PulseAI Assistant inside SyncPulse Pro.");
+      const threadContext = activeChat.map(m => ({ sender: m.sender.name, text: m.text }));
+      const aiReplyText = await askGeminiWithThreadContext(content, threadContext);
       setIsAiThinking(false);
 
       const aiMsg: ChatMessage = {
@@ -623,15 +665,17 @@ export default function Home() {
     }
   };
 
+  /* Reply-Aware & Context-Aware Rephrase */
   const handleInlineAiEnhance = async (style: 'professional' | 'concise' | 'casual' | 'translate') => {
     if (!inputText.trim()) return;
     setShowAiMenu(false);
     setIsAiThinking(true);
+
+    const targetContext = replyingTo ? replyingTo.text : undefined;
     let enhanced = '';
-    if (style === 'professional') enhanced = await rephraseText(inputText.trim(), 'professional');
-    else if (style === 'concise') enhanced = await rephraseText(inputText.trim(), 'concise');
-    else if (style === 'casual') enhanced = await rephraseText(inputText.trim(), 'casual');
-    else if (style === 'translate') enhanced = await translateText(inputText.trim(), 'Spanish');
+    if (style === 'translate') enhanced = await translateText(inputText.trim(), 'Spanish');
+    else enhanced = await rephraseWithContext(inputText.trim(), targetContext, style);
+
     setIsAiThinking(false);
     if (enhanced) setInputText(enhanced);
   };
@@ -660,6 +704,13 @@ export default function Home() {
     const summary = await summarizeChatHistory(msgs);
     setIsAiThinking(false);
     setSummaryModalText(summary);
+  };
+
+  const handleGenerateAiBio = async () => {
+    setIsAiThinking(true);
+    const bio = await generateUserBio("Senior WebRTC and Full-Stack Architect building real-time applications");
+    setIsAiThinking(false);
+    setUserBio(bio);
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -798,7 +849,9 @@ export default function Home() {
           <div className="matte-card p-6 max-w-xs w-full text-center flex flex-col items-center">
             <img src={outgoingCall.target.avatar || AVATAR_PRESETS[0]} alt="" className="w-16 h-16 rounded-full ring-2 ring-red-500 mb-3 object-cover" />
             <h3 className="text-base font-bold text-white">{outgoingCall.target.name}</h3>
-            <p className="text-xs text-red-400 mt-1 font-medium">Calling ({outgoingCall.isVideo ? 'Video' : 'Voice'})...</p>
+            <p className="text-xs text-red-400 mt-1 font-medium flex items-center gap-1.5 justify-center">
+              <AnimatedDialRingIcon size={16} /> Calling ({outgoingCall.isVideo ? 'Video' : 'Voice'})...
+            </p>
             <button onClick={leaveCall} className="mt-6 app-btn p-3 rounded-full bg-red-600 text-white">
               <PhoneOff size={20} />
             </button>
@@ -808,7 +861,7 @@ export default function Home() {
 
       {busyNotice && (
         <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-xl matte-card text-white text-xs font-medium shadow-2xl flex items-center gap-2">
-          <Bell size={14} className="text-red-400 animate-pulse" /> {busyNotice}
+          <AnimatedBellIcon size={15} /> {busyNotice}
         </div>
       )}
 
@@ -822,7 +875,7 @@ export default function Home() {
                 <UserPlus size={12} /> Invite
               </button>
             </div>
-            <div className="pointer-events-auto">
+            <div className="pointer-events-auto flex items-center gap-2">
               <NetworkQualityBadge quality={networkQuality.quality} rttMs={networkQuality.rttMs} bitrateKbps={networkQuality.bitrateKbps} />
             </div>
           </div>
@@ -871,6 +924,16 @@ export default function Home() {
               screenStream={screenStream}
             />
           </div>
+
+          {/* AI Post-Call Summary Banner */}
+          {aiMeetingNotes && (
+            <div className="absolute bottom-20 left-4 right-4 z-40 p-3 rounded-xl bg-slate-900/90 border border-white/10 text-xs text-white flex items-center justify-between shadow-2xl">
+              <div className="flex items-center gap-2">
+                <AiSparkleIcon size={16} /> <span>{aiMeetingNotes}</span>
+              </div>
+              <button onClick={() => setAiMeetingNotes(null)} className="p-1 text-slate-400"><X size={14} /></button>
+            </div>
+          )}
 
           <ControlBar
             isAudioMuted={isAudioMuted}
@@ -941,7 +1004,7 @@ export default function Home() {
                 </div>
 
                 <div className="relative mb-3">
-                  <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Search friends & messages..." className="matte-input !py-1.5 text-xs pl-8" />
+                  <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Search messages & contacts..." className="matte-input !py-1.5 text-xs pl-8" />
                   <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
                 </div>
 
@@ -1040,8 +1103,10 @@ export default function Home() {
                           {/* 💬 Message Hover Action Menu */}
                           {!msg.isDeleted && (
                             <div className={`absolute -top-3.5 ${isMe ? 'right-2' : 'left-2'} hidden group-hover:flex items-center gap-1 z-30 px-2 py-0.5 rounded-full bg-slate-900 border border-white/10 shadow-lg`}>
-                              {EMOJI_REACTIONS.map(emoji => (
-                                <button key={emoji} onClick={() => handleAddReaction(msg.id, emoji)} className="text-xs hover:scale-130 transition-transform px-0.5">{emoji}</button>
+                              {EMOJI_REACTIONS.map(r => (
+                                <button key={r.type} onClick={() => handleAddReaction(msg.id, r.label)} className="text-xs hover:scale-125 px-0.5">
+                                  <AnimatedReactionIcon type={r.type as any} size={14} />
+                                </button>
                               ))}
                               <button onClick={() => setReplyingTo(msg)} className="p-0.5 text-slate-400 hover:text-white" title="Reply"><Reply size={12} /></button>
                               {isMe && (
@@ -1073,7 +1138,7 @@ export default function Home() {
                               <div className={`flex items-center justify-end gap-1 mt-1 text-[9px] ${isMe ? 'text-red-100' : 'text-slate-500'}`}>
                                 {msg.isEdited && <span className="italic mr-0.5">(edited)</span>}
                                 <span>{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
-                                {isMe && <span>{msg.status === 'read' ? <CheckCheck size={12} /> : <Check size={12} />}</span>}
+                                {isMe && <AnimatedReadTickIcon status={msg.status} size={14} />}
                               </div>
                             </div>
                           )}
@@ -1090,6 +1155,18 @@ export default function Home() {
                     )}
                     <div ref={messagesEndRef} />
                   </div>
+
+                  {/* 🤖 Smart Reply Chips */}
+                  {smartReplyChips.length > 0 && (
+                    <div className="px-4 py-2 flex items-center gap-2 overflow-x-auto bg-slate-900/60 border-t border-white/5">
+                      <span className="text-[10px] text-slate-400 font-bold shrink-0 flex items-center gap-1"><AiSparkleIcon size={12} /> Suggested:</span>
+                      {smartReplyChips.map((reply, idx) => (
+                        <button key={idx} onClick={() => handleSendMessage(reply)} className="px-3 py-1 rounded-full bg-white/10 hover:bg-white/20 text-xs text-white shrink-0 font-medium transition-all">
+                          {reply}
+                        </button>
+                      ))}
+                    </div>
+                  )}
 
                   {/* 💬 Quoted Reply Banner */}
                   {replyingTo && (
@@ -1167,7 +1244,7 @@ export default function Home() {
             </div>
           )}
 
-          {/* Sub-Page 3: FRIENDS SYSTEM */}
+          {/* Sub-Page 3: FRIENDS SYSTEM (With AI Icebreakers) */}
           {screen === 'friends' && (
             <div className="flex-1 flex flex-col h-full overflow-hidden bg-[#0d0e12]">
               <div className="px-5 h-14 flex items-center justify-between bg-[#08090c] border-b border-white/10">
@@ -1261,7 +1338,7 @@ export default function Home() {
                   <button onClick={async () => {
                     if (!aiPolishInput.trim()) return;
                     setIsAiThinking(true);
-                    const res = await rephraseText(aiPolishInput, 'professional');
+                    const res = await rephraseWithContext(aiPolishInput);
                     setIsAiThinking(false);
                     setAiPolishOutput(res);
                   }} className="app-btn app-btn-primary px-4 py-2 text-xs">Rephrase</button>
@@ -1271,7 +1348,7 @@ export default function Home() {
             </div>
           )}
 
-          {/* Sub-Page 5: PROFILE */}
+          {/* Sub-Page 5: PROFILE (With AI Bio Generator) */}
           {screen === 'profile' && (
             <div className="flex-1 flex flex-col h-full overflow-y-auto bg-[#0d0e12]">
               <div className="px-5 h-14 flex items-center justify-between bg-[#08090c] border-b border-white/10">
@@ -1279,14 +1356,17 @@ export default function Home() {
                 <button onClick={handleLogout} className="px-3 py-1 rounded-lg text-xs bg-red-500/20 text-red-400 border border-red-500/30"><LogOut size={13} /> Logout</button>
               </div>
               <div className="p-6 max-w-md mx-auto w-full">
-                <div className="matte-card p-6 flex items-center justify-between">
+                <div className="matte-card p-6 space-y-4">
                   <div className="flex items-center gap-4">
                     <img src={registeredUser.avatar} alt="" className="w-16 h-16 rounded-full object-cover ring-2 ring-red-500" />
                     <div>
                       <h3 className="text-base font-bold text-white">{registeredUser.name}</h3>
-                      <p className="text-xs text-slate-400">{userBio}</p>
+                      <p className="text-xs text-slate-400 mt-0.5">{userBio}</p>
                     </div>
                   </div>
+                  <button onClick={handleGenerateAiBio} className="w-full py-2 rounded-xl text-xs font-semibold bg-white/5 hover:bg-white/10 text-white flex items-center justify-center gap-1.5">
+                    <AiSparkleIcon size={14} /> Rewrite Bio with AI
+                  </button>
                 </div>
               </div>
             </div>

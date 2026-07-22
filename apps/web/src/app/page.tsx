@@ -21,8 +21,8 @@ import {
   Phone, Video, PhoneOff, Mic, MicOff, VideoOff, Monitor, MessageSquare,
   Search, Send, CheckCheck, Check, ArrowLeft, Settings, LogOut, Users, Zap,
   X, Sparkles, Hash, Edit2, Bot, Wand2, Globe2, ShieldCheck,
-  Pin, File, PhoneCall, User as UserIcon, UserPlus, UserCheck, UserX, UserSearch,
-  Plus, Radio, Activity, Volume2
+  Pin, File, PhoneCall, User as UserIcon, UserPlus, UserCheck, UserSearch,
+  Activity, RefreshCw
 } from 'lucide-react';
 import { askGemini, generateSmartReplies, summarizeChatHistory, rephraseText, translateText } from '../lib/aiService';
 
@@ -93,6 +93,9 @@ function playSound(type: 'message' | 'ring' | 'dial') {
 }
 
 export default function Home() {
+  // Splash & Session state
+  const [showSplash, setShowSplash] = useState(true);
+  const [splashProgress, setSplashProgress] = useState(15);
   const [userName, setUserName] = useState('');
   const [selectedAvatar, setSelectedAvatar] = useState(AVATAR_PRESETS[0]);
   const [userBio, setUserBio] = useState('Senior WebRTC & Full-Stack Engineer.');
@@ -104,10 +107,10 @@ export default function Home() {
   const [selectedContact, setSelectedContact] = useState<User | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
-  // Friend Request State
-  const [friends, setFriends] = useState<string[]>([]); // Array of friend user IDs
-  const [friendRequests, setFriendRequests] = useState<User[]>([]); // Incoming pending friend requests
-  const [sentRequests, setSentRequests] = useState<string[]>([]); // Sent request user IDs
+  // Friend Request State (with LocalStorage Sync)
+  const [friends, setFriends] = useState<string[]>([]);
+  const [friendRequests, setFriendRequests] = useState<User[]>([]);
+  const [sentRequests, setSentRequests] = useState<string[]>([]);
   const [friendsTab, setFriendsTab] = useState<'friends' | 'requests' | 'find'>('friends');
 
   const [theme, setTheme] = useState<ThemeKey>(() => {
@@ -161,6 +164,49 @@ export default function Home() {
   const sigRef = useRef<SignalingClient | null>(null);
   const pmRef = useRef<PeerConnectionManager | null>(null);
 
+  /* ── 1. Splash Screen Loader ───────────────────────────────────────── */
+  useEffect(() => {
+    const timer1 = setTimeout(() => setSplashProgress(60), 400);
+    const timer2 = setTimeout(() => setSplashProgress(100), 1100);
+    const timer3 = setTimeout(() => setShowSplash(false), 1600);
+    return () => { clearTimeout(timer1); clearTimeout(timer2); clearTimeout(timer3); };
+  }, []);
+
+  /* ── 2. Session Restoration from LocalStorage ────────────────────── */
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const savedSession = localStorage.getItem('syncpulse_session');
+    if (savedSession) {
+      try {
+        const parsed = JSON.parse(savedSession);
+        if (parsed && parsed.id && parsed.name) {
+          setUserName(parsed.name);
+          if (parsed.avatar) setSelectedAvatar(parsed.avatar);
+          if (parsed.bio) setUserBio(parsed.bio);
+
+          // Restore friends
+          const savedFriends = localStorage.getItem(`syncpulse_friends_${parsed.id}`);
+          if (savedFriends) {
+            try { setFriends(JSON.parse(savedFriends)); } catch (e) {}
+          }
+
+          // Auto-connect signaling for restored session
+          const userObj: User = { id: parsed.id, name: parsed.name, avatar: parsed.avatar, status: 'online' };
+          setRegisteredUser(userObj);
+          sigRef.current?.connect();
+          sigRef.current?.register(userObj);
+        }
+      } catch (e) {}
+    }
+  }, []);
+
+  /* ── 3. Persist Friends to LocalStorage ───────────────────────────── */
+  useEffect(() => {
+    if (registeredUser && typeof window !== 'undefined') {
+      localStorage.setItem(`syncpulse_friends_${registeredUser.id}`, JSON.stringify(friends));
+    }
+  }, [friends, registeredUser]);
+
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
     localStorage.setItem('pulse_theme', theme);
@@ -181,7 +227,7 @@ export default function Home() {
     return () => clearInterval(interval);
   }, [isVoiceRecording]);
 
-  /* ── Signaling Handlers ─────────────────────────────────────────────── */
+  /* ── 4. Signaling Client & WebRTC Handlers ────────────────────────── */
   useEffect(() => {
     const sig = new SignalingClient({ url: SIGNALING_URL, autoConnect: false });
     sigRef.current = sig;
@@ -311,16 +357,36 @@ export default function Home() {
     }
   }, [selectedContact, chatMessages, registeredUser]);
 
-  /* ── User Registration ─────────────────────────────────────────── */
+  /* ── 5. User Login & Session Creation ───────────────────────────── */
   const handleRegister = (e: React.FormEvent) => {
     e.preventDefault();
     if (!userName.trim()) return;
     const id = `u_${Math.random().toString(36).substring(2, 9)}`;
+    const sessionObj = { id, name: userName.trim(), avatar: selectedAvatar, bio: userBio };
+
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('syncpulse_session', JSON.stringify(sessionObj));
+    }
+
+    const userObj: User = { id, name: userName.trim(), avatar: selectedAvatar, status: 'online' };
+    setRegisteredUser(userObj);
     sigRef.current?.connect();
-    sigRef.current?.register({ id, name: userName.trim(), avatar: selectedAvatar });
+    sigRef.current?.register(userObj);
   };
 
-  /* ── Friend Request Actions ───────────────────────────────────────── */
+  /* ── 6. Logout Action ──────────────────────────────────────────── */
+  const handleLogout = () => {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('syncpulse_session');
+    }
+    leaveCall();
+    sigRef.current?.disconnect();
+    setRegisteredUser(null);
+    setSelectedContact(null);
+    setChatMessages([]);
+  };
+
+  /* ── 7. Friend Request Actions ─────────────────────────────────── */
   const sendFriendRequest = (targetUser: User) => {
     sigRef.current?.sendFriendRequest(targetUser.id);
     setSentRequests((prev) => Array.from(new Set([...prev, targetUser.id])));
@@ -343,7 +409,7 @@ export default function Home() {
 
   const isFriend = (userId: string) => userId === AI_BOT_USER.id || friends.includes(userId);
 
-  /* ── WebRTC Calling Actions ──────────────────────────────────────────── */
+  /* ── 8. WebRTC Calling Actions ──────────────────────────────────── */
   const startCall = async (target: User, isVideo: boolean) => {
     if (target.id === AI_BOT_USER.id) {
       alert("PulseAI Assistant cannot join direct voice calls.");
@@ -441,7 +507,7 @@ export default function Home() {
     }
   };
 
-  /* ── Chat Messages ──────────────────────────────────────────────────── */
+  /* ── 9. Chat Messaging Actions ─────────────────────────────────── */
   const handleSendMessage = async (textToSend?: string) => {
     const rawContent = textToSend || inputText;
     let content = rawContent.trim();
@@ -578,37 +644,77 @@ export default function Home() {
   };
 
   /* ════════════════════════════════════════════════════════════════════════
-     SIGN IN PAGE
+     1. FUTURISTIC ANIMATED SPLASH SCREEN
+     ════════════════════════════════════════════════════════════════════════ */
+  if (showSplash) {
+    return (
+      <div className="h-full w-full flex flex-col items-center justify-center relative overflow-hidden anim-fade" style={{ background: '#030712' }}>
+        {/* Floating Gradient Orbs */}
+        <div className="absolute top-1/3 left-1/3 w-96 h-96 rounded-full blur-3xl opacity-30 anim-float" style={{ background: '#3b82f6' }} />
+        <div className="absolute bottom-1/3 right-1/3 w-96 h-96 rounded-full blur-3xl opacity-30 anim-float" style={{ background: '#8b5cf6', animationDelay: '-3s' }} />
+
+        <div className="relative z-10 flex flex-col items-center text-center p-6 max-w-sm w-full">
+          <div className="relative mb-6">
+            <div className="absolute -inset-4 rounded-3xl bg-blue-500/20 blur-xl anim-ring" />
+            <div className="w-20 h-20 rounded-3xl flex items-center justify-center shadow-2xl relative z-10" style={{ background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)' }}>
+              <Zap size={44} className="text-white anim-glow" />
+            </div>
+          </div>
+
+          <h1 className="text-3xl font-black tracking-tight text-white mb-1">
+            SyncPulse <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400">Pro</span>
+          </h1>
+          <p className="text-xs text-slate-400 font-medium mb-8">Enterprise WebRTC & AI Communication Network</p>
+
+          {/* Animated Loader Bar */}
+          <div className="w-full bg-slate-800/80 h-2 rounded-full overflow-hidden border border-slate-700/50 p-0.5 shadow-inner mb-3">
+            <div className="h-full bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 rounded-full transition-all duration-700 ease-out" style={{ width: `${splashProgress}%` }} />
+          </div>
+
+          <div className="flex items-center justify-between w-full text-[10px] text-slate-500 font-mono">
+            <span>Initializing WebRTC Core...</span>
+            <span>{splashProgress}%</span>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  /* ════════════════════════════════════════════════════════════════════════
+     2. HIGHLY ANIMATED SIGN IN SCREEN
      ════════════════════════════════════════════════════════════════════════ */
   if (!registeredUser) {
     return (
       <div className="h-full w-full flex items-center justify-center relative overflow-hidden" style={{ background: 'var(--bg-app)' }}>
-        {/* Ambient Glow Background Orbs */}
-        <div className="absolute top-1/4 left-1/4 w-96 h-96 rounded-full blur-3xl opacity-20 pointer-events-none" style={{ background: 'var(--accent)' }} />
-        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 rounded-full blur-3xl opacity-20 pointer-events-none" style={{ background: 'var(--purple)' }} />
+        {/* Animated Background Spheres */}
+        <div className="absolute top-1/4 left-1/4 w-96 h-96 rounded-full blur-3xl opacity-25 anim-float" style={{ background: 'var(--accent)' }} />
+        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 rounded-full blur-3xl opacity-25 anim-float" style={{ background: 'var(--purple)', animationDelay: '-3s' }} />
 
         <form onSubmit={handleRegister} className="relative z-10 w-full max-w-md mx-4 anim-scale glass-panel rounded-3xl p-8 md:p-10 shadow-2xl">
           <div className="flex flex-col items-center mb-8">
-            <div className="w-16 h-16 rounded-2xl flex items-center justify-center mb-4 shadow-2xl anim-glow" style={{ background: 'linear-gradient(135deg, var(--accent), var(--purple))' }}>
-              <Zap size={32} className="text-white" />
+            <div className="relative mb-4">
+              <div className="absolute -inset-3 rounded-3xl bg-blue-500/20 blur-lg anim-ring" />
+              <div className="w-16 h-16 rounded-2xl flex items-center justify-center relative z-10 shadow-2xl" style={{ background: 'linear-gradient(135deg, var(--accent), var(--purple))' }}>
+                <Zap size={32} className="text-white" />
+              </div>
             </div>
             <h1 className="text-3xl font-extrabold tracking-tight" style={{ color: 'var(--text-primary)' }}>SyncPulse Pro</h1>
-            <p className="text-xs mt-1 text-center font-medium" style={{ color: 'var(--text-muted)' }}>Enterprise WebRTC Video Calling & AI Network</p>
+            <p className="text-xs mt-1 text-center font-medium" style={{ color: 'var(--text-muted)' }}>Enterprise WebRTC Calling & AI Communications</p>
           </div>
 
           <div className="mb-6">
-            <label className="block text-[11px] font-bold uppercase tracking-wider mb-3 text-center" style={{ color: 'var(--text-muted)' }}>Choose Profile Avatar</label>
+            <label className="block text-[11px] font-bold uppercase tracking-wider mb-3 text-center" style={{ color: 'var(--text-muted)' }}>Choose Avatar Profile</label>
             <div className="flex justify-center gap-3">
               {AVATAR_PRESETS.map((url, i) => (
-                <img key={i} src={url} alt="" onClick={() => setSelectedAvatar(url)} className="w-12 h-12 rounded-full object-cover cursor-pointer transition-all hover:scale-115 shadow-md" style={{ border: selectedAvatar === url ? '3px solid var(--accent)' : '2px solid var(--border)' }} />
+                <img key={i} src={url} alt="" onClick={() => setSelectedAvatar(url)} className="w-12 h-12 rounded-full object-cover cursor-pointer transition-all hover:scale-125 shadow-md" style={{ border: selectedAvatar === url ? '3px solid var(--accent)' : '2px solid var(--border)' }} />
               ))}
             </div>
           </div>
 
           <label className="block text-[11px] font-bold uppercase tracking-wider mb-2" style={{ color: 'var(--text-muted)' }}>Your Display Name</label>
           <input type="text" value={userName} onChange={(e) => setUserName(e.target.value)} placeholder="e.g. Alex Rivera" className="app-input mb-6 !rounded-2xl !py-3.5" required autoFocus />
-          <button type="submit" className="app-btn app-btn-primary w-full py-4 text-xs font-bold shadow-xl !rounded-2xl">
-            Enter Workspace
+          <button type="submit" className="app-btn app-btn-primary w-full py-4 text-xs font-bold shadow-xl !rounded-2xl flex items-center justify-center gap-2">
+            <Sparkles size={16} /> Enter Workspace
           </button>
         </form>
       </div>
@@ -616,7 +722,7 @@ export default function Home() {
   }
 
   /* ════════════════════════════════════════════════════════════════════════
-     MAIN APPLICATION SHELL
+     3. MAIN APPLICATION WORKSPACE
      ════════════════════════════════════════════════════════════════════════ */
   return (
     <div className="h-full w-full flex flex-col md:flex-row relative overflow-hidden" style={{ background: 'var(--bg-app)' }}>
@@ -787,7 +893,7 @@ export default function Home() {
               <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full" style={{ background: 'var(--green)', border: '2px solid var(--bg-app)' }} />
             </div>
 
-            <button onClick={() => window.location.reload()} className="app-btn app-btn-ghost w-10 h-10 rounded-xl" title="Logout" style={{ color: 'var(--text-muted)' }}>
+            <button onClick={handleLogout} className="app-btn app-btn-ghost w-10 h-10 rounded-xl" title="Logout" style={{ color: 'var(--text-muted)' }}>
               <LogOut size={18} />
             </button>
           </aside>
@@ -1223,21 +1329,29 @@ export default function Home() {
           {/* ─── SUB-PAGE 5: PROFILE ────────────────────────────────────── */}
           {screen === 'profile' && (
             <div className="flex-1 flex flex-col h-full overflow-y-auto" style={{ background: 'var(--bg-main)' }}>
-              <div className="px-6 h-16 flex items-center shrink-0" style={{ borderBottom: '1px solid var(--border)', background: 'var(--bg-sidebar)' }}>
+              <div className="px-6 h-16 flex items-center justify-between shrink-0" style={{ borderBottom: '1px solid var(--border)', background: 'var(--bg-sidebar)' }}>
                 <h2 className="text-lg font-extrabold flex items-center gap-2.5" style={{ color: 'var(--text-primary)' }}>
                   <UserIcon size={20} style={{ color: 'var(--accent)' }} /> User Profile
                 </h2>
+                <button onClick={handleLogout} className="app-btn app-btn-ghost px-3 py-1.5 text-xs text-red-400 hover:bg-red-500/20 border border-red-500/30">
+                  <LogOut size={15} /> Logout
+                </button>
               </div>
               <div className="flex-1 overflow-y-auto p-4 md:p-8">
-                <div className="max-w-2xl mx-auto p-8 rounded-3xl flex items-center gap-6 shadow-2xl glass-panel">
-                  <img src={registeredUser.avatar} alt="" className="w-24 h-24 rounded-full object-cover shadow-2xl" style={{ border: '4px solid var(--accent)' }} />
-                  <div>
-                    <h3 className="text-2xl font-extrabold" style={{ color: 'var(--text-primary)' }}>{registeredUser.name}</h3>
-                    <p className="text-xs mt-1 font-medium" style={{ color: 'var(--text-muted)' }}>{userBio}</p>
-                    <span className="inline-block mt-3 px-3.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider text-white shadow-md" style={{ background: 'linear-gradient(135deg, var(--accent), var(--purple))' }}>
-                      WebRTC Pro Member
-                    </span>
+                <div className="max-w-2xl mx-auto p-8 rounded-3xl flex items-center justify-between shadow-2xl glass-panel">
+                  <div className="flex items-center gap-6">
+                    <img src={registeredUser.avatar} alt="" className="w-24 h-24 rounded-full object-cover shadow-2xl" style={{ border: '4px solid var(--accent)' }} />
+                    <div>
+                      <h3 className="text-2xl font-extrabold" style={{ color: 'var(--text-primary)' }}>{registeredUser.name}</h3>
+                      <p className="text-xs mt-1 font-medium" style={{ color: 'var(--text-muted)' }}>{userBio}</p>
+                      <span className="inline-block mt-3 px-3.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider text-white shadow-md" style={{ background: 'linear-gradient(135deg, var(--accent), var(--purple))' }}>
+                        WebRTC Pro Member
+                      </span>
+                    </div>
                   </div>
+                  <button onClick={handleLogout} className="app-btn px-4 py-2 text-xs font-bold bg-red-600/20 text-red-400 border border-red-500/40 hover:bg-red-600 hover:text-white">
+                    <LogOut size={16} /> Logout
+                  </button>
                 </div>
               </div>
             </div>
@@ -1246,10 +1360,13 @@ export default function Home() {
           {/* ─── SUB-PAGE 6: SETTINGS ────────────────────────────────────── */}
           {screen === 'settings' && (
             <div className="flex-1 flex flex-col h-full overflow-y-auto" style={{ background: 'var(--bg-main)' }}>
-              <div className="px-6 h-16 flex items-center shrink-0" style={{ borderBottom: '1px solid var(--border)', background: 'var(--bg-sidebar)' }}>
+              <div className="px-6 h-16 flex items-center justify-between shrink-0" style={{ borderBottom: '1px solid var(--border)', background: 'var(--bg-sidebar)' }}>
                 <h2 className="text-lg font-extrabold flex items-center gap-2.5" style={{ color: 'var(--text-primary)' }}>
                   <Settings size={20} style={{ color: 'var(--accent)' }} /> Settings & Preferences
                 </h2>
+                <button onClick={handleLogout} className="app-btn app-btn-ghost px-3 py-1.5 text-xs text-red-400 hover:bg-red-500/20 border border-red-500/30">
+                  <LogOut size={15} /> Logout
+                </button>
               </div>
               <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-6 max-w-2xl mx-auto w-full">
                 <div className="p-6 rounded-3xl space-y-4 shadow-2xl glass-panel">
@@ -1262,6 +1379,14 @@ export default function Home() {
                       </button>
                     ))}
                   </div>
+                </div>
+
+                <div className="p-6 rounded-3xl space-y-4 shadow-2xl glass-panel">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-red-400">Account Session</h3>
+                  <p className="text-xs text-slate-400">Log out of your current session on this browser.</p>
+                  <button onClick={handleLogout} className="app-btn px-5 py-2.5 text-xs font-bold bg-red-600 text-white shadow-lg">
+                    <LogOut size={16} /> Sign Out of Account
+                  </button>
                 </div>
               </div>
             </div>

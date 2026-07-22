@@ -155,10 +155,23 @@
   50% { box-shadow: 0 0 30px var(--accent-glow); }
 }
 
-.anim-fade { animation: fadeIn 0.2s ease-out forwards; }
-.anim-slide-up { animation: slideUp 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
-.anim-scale { animation: scaleIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+@keyframes floatOrb {
+  0%, 100% { transform: translateY(0px) scale(1); }
+  50% { transform: translateY(-20px) scale(1.08); }
+}
+
+@keyframes pulseRing {
+  0% { transform: scale(0.95); opacity: 0.8; }
+  50% { transform: scale(1.15); opacity: 0.3; }
+  100% { transform: scale(0.95); opacity: 0.8; }
+}
+
+.anim-fade { animation: fadeIn 0.25s ease-out forwards; }
+.anim-slide-up { animation: slideUp 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
+.anim-scale { animation: scaleIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards; }
 .anim-glow { animation: pulseGlow 2.5s infinite ease-in-out; }
+.anim-float { animation: floatOrb 6s infinite ease-in-out; }
+.anim-ring { animation: pulseRing 3s infinite ease-in-out; }
 
 @layer components {
   .glass-panel {

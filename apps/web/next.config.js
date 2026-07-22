@@ -2,8 +2,8 @@ const path = require('path');
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  transpilePackages: ['@webrtc/ui', '@webrtc/sdk', '@webrtc/types'],
   reactStrictMode: true,
+  transpilePackages: ['@webrtc/ui', '@webrtc/sdk', '@webrtc/types'],
   webpack: (config) => {
     config.resolve.alias = {
       ...config.resolve.alias,

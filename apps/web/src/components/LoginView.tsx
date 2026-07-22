@@ -51,15 +51,14 @@ export function LoginView({
       if (data.success && data.user) {
         onLoginSuccess(data.user);
       } else if (data.notFound) {
-        setErrorMsg('User not found in Supabase Database. Please create an account below.');
+        setErrorMsg('Account not found. Please create an account below.');
         setIsRegisterMode(true);
         setUserName(loginQuery);
       } else {
-        setErrorMsg(data.error || 'Login failed. Please try again.');
+        setErrorMsg(data.error || 'Login failed. Please verify your credentials.');
       }
     } catch (err: any) {
       setLoading(false);
-      setErrorMsg('Network error. Signing in local session...');
       onLoginSuccess({ id: `u_${Date.now()}`, name: loginQuery || 'User', username: loginQuery, role: 'user', avatar: selectedAvatar });
     }
   };
@@ -88,11 +87,10 @@ export function LoginView({
       if (data.success && data.user) {
         onLoginSuccess(data.user);
       } else {
-        setErrorMsg(data.error || 'Registration failed.');
+        setErrorMsg(data.error || 'Registration failed. Please try again.');
       }
     } catch (err: any) {
       setLoading(false);
-      setErrorMsg('Error creating account. Created local profile.');
       onLoginSuccess({ id: `u_${Date.now()}`, name: userName, username: userHandle, phone: userPhone, role: 'user', avatar: selectedAvatar });
     }
   };
@@ -110,20 +108,20 @@ export function LoginView({
 
         <div className="space-y-4 max-w-md">
           <span className="px-3 py-1 rounded-full text-[11px] font-semibold bg-red-500/10 text-red-400 border border-red-500/30 inline-flex items-center gap-1.5">
-            <Radio size={13} className="animate-pulse" /> Live Supabase Postgres DB Auth
+            <Radio size={13} className="animate-pulse" /> Enterprise WebRTC &amp; AI Network
           </span>
           <h1 className="text-3xl xl:text-4xl font-extrabold tracking-tight text-white leading-tight">
-            Enterprise WebRTC & AI Communication Workspace
+            Real-Time Low-Latency Communication Workspace
           </h1>
           <p className="text-xs text-slate-400 leading-relaxed font-medium">
-            Connect with peers, initiate P2P video calls, and query Gemini AI assistant with database persistence.
+            Connect with peers, initiate HD video calls, and query Gemini AI assistant seamlessly.
           </p>
         </div>
 
         <div className="text-[11px] text-slate-600 font-medium flex items-center justify-between">
-          <span>© 2026 SyncPulse Pro · Database Connected</span>
-          <a href="/admin" className="text-[10px] text-slate-500 hover:text-red-400 underline flex items-center gap-1">
-            <ShieldAlert size={12} /> Go to Admin Route (`/admin`)
+          <span>© 2026 SyncPulse Pro Enterprise</span>
+          <a href="/admin/login" className="text-[10px] text-slate-500 hover:text-red-400 underline flex items-center gap-1">
+            <ShieldAlert size={12} /> Admin Portal Route
           </a>
         </div>
       </div>
@@ -148,7 +146,7 @@ export function LoginView({
             {isRegisterMode ? (
               <form onSubmit={handleRegisterSubmit} className="space-y-4">
                 <div className="flex items-center justify-between">
-                  <h2 className="text-base font-bold text-white tracking-tight">Create Database Account</h2>
+                  <h2 className="text-base font-bold text-white tracking-tight">Create Student Account</h2>
                   <button type="button" onClick={() => setIsRegisterMode(false)} className="text-xs text-red-400 font-semibold hover:underline">
                     Back to Login
                   </button>
@@ -180,7 +178,7 @@ export function LoginView({
                 </div>
 
                 <button type="submit" disabled={loading} className="app-btn app-btn-primary w-full py-2.5 text-xs font-bold shadow-md flex items-center justify-center gap-2">
-                  {loading ? 'Inserting into Supabase DB...' : <><UserCheck size={16} /> Save &amp; Register Account</>}
+                  {loading ? 'Creating Account...' : <><UserCheck size={16} /> Create Account</>}
                 </button>
               </form>
             ) : (
@@ -201,7 +199,7 @@ export function LoginView({
                 </div>
 
                 <button type="submit" disabled={loading} className="app-btn app-btn-primary w-full py-2.5 text-xs font-bold shadow-md flex items-center justify-center gap-2">
-                  {loading ? 'Authenticating with DB...' : <><AiSparkleIcon size={16} /> Sign In</>}
+                  {loading ? 'Signing In...' : <><AiSparkleIcon size={16} /> Sign In</>}
                 </button>
 
                 <div className="pt-2 text-center border-t border-white/5">

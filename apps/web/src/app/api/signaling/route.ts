@@ -10,7 +10,6 @@ interface SignalEvent {
   timestamp: number;
 }
 
-// In-Memory store for Vercel Serverless instance
 const eventBus: SignalEvent[] = [];
 const activeUsersMap = new Map<string, any>();
 
@@ -18,6 +17,19 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const userId = searchParams.get('userId');
   const since = parseInt(searchParams.get('since') || '0', 10);
+
+  if (userId && activeUsersMap.has(userId)) {
+    const existing = activeUsersMap.get(userId);
+    activeUsersMap.set(userId, { ...existing, status: 'online', lastSeen: new Date().toISOString() });
+  }
+
+  // Prune stale users inactive for > 30s
+  const now = Date.now();
+  for (const [id, user] of activeUsersMap.entries()) {
+    if (user.lastSeen && now - new Date(user.lastSeen).getTime() > 30000) {
+      activeUsersMap.delete(id);
+    }
+  }
 
   if (!userId) {
     return NextResponse.json({ activeUsers: Array.from(activeUsersMap.values()), events: [] });
@@ -57,7 +69,7 @@ export async function POST(req: NextRequest) {
       };
 
       eventBus.push(signalEvt);
-      if (eventBus.length > 500) eventBus.shift(); // Keep buffer bounded
+      if (eventBus.length > 500) eventBus.shift();
 
       return NextResponse.json({ success: true, eventId: signalEvt.id });
     }

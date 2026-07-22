@@ -42,6 +42,9 @@ export class SignalingClient {
   private socket: Socket<ServerToClientEvents, ClientToServerEvents>;
   private listeners: Map<keyof EventMap, Set<Function>> = new Map();
   public currentUser: User | null = null;
+  private pollInterval: any = null;
+  private lastPollTime = 0;
+  private processedEventIds = new Set<string>();
 
   constructor(options: SignalingClientOptions) {
     this.socket = io(options.url, {
@@ -50,6 +53,7 @@ export class SignalingClient {
     });
 
     this.setupListeners();
+    this.startHttpFallbackPolling();
   }
 
   private setupListeners() {
@@ -85,6 +89,99 @@ export class SignalingClient {
     this.socket.on('presence:update', (users) => this.emitLocal('presence:update', users));
   }
 
+  private startHttpFallbackPolling() {
+    if (typeof window === 'undefined') return;
+    this.pollInterval = setInterval(async () => {
+      if (!this.currentUser) return;
+      try {
+        const url = `/api/signaling?userId=${encodeURIComponent(this.currentUser.id)}&since=${this.lastPollTime}`;
+        const res = await fetch(url);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.timestamp) this.lastPollTime = data.timestamp - 100;
+          if (Array.isArray(data.activeUsers)) {
+            this.emitLocal('presence:update', data.activeUsers);
+          }
+          if (Array.isArray(data.events)) {
+            for (const evt of data.events) {
+              if (this.processedEventIds.has(evt.id)) continue;
+              this.processedEventIds.add(evt.id);
+              if (this.processedEventIds.size > 1000) {
+                const first = Array.from(this.processedEventIds)[0];
+                this.processedEventIds.delete(first);
+              }
+              this.handleServerlessEvent(evt);
+            }
+          }
+        }
+      } catch (e) {}
+    }, 1200);
+  }
+
+  private handleServerlessEvent(evt: { type: string; payload: any; senderId?: string }) {
+    switch (evt.type) {
+      case 'call:incoming':
+        this.emitLocal('call:incoming', evt.payload);
+        break;
+      case 'call:accepted':
+        this.emitLocal('call:accepted', evt.payload);
+        break;
+      case 'call:declined':
+        this.emitLocal('call:declined', evt.payload);
+        break;
+      case 'call:ended':
+        this.emitLocal('call:ended', evt.payload);
+        break;
+      case 'call:busy':
+        this.emitLocal('call:busy', evt.payload);
+        break;
+      case 'signal:offer':
+        this.emitLocal('signal:offer', { senderSocketId: evt.senderId || 'http_peer', sdp: evt.payload.sdp });
+        break;
+      case 'signal:answer':
+        this.emitLocal('signal:answer', { senderSocketId: evt.senderId || 'http_peer', sdp: evt.payload.sdp });
+        break;
+      case 'signal:ice-candidate':
+        this.emitLocal('signal:ice-candidate', { senderSocketId: evt.senderId || 'http_peer', candidate: evt.payload.candidate });
+        break;
+      case 'chat:message':
+        this.emitLocal('chat:message', evt.payload);
+        break;
+      case 'chat:updated':
+        this.emitLocal('chat:updated', evt.payload);
+        break;
+      case 'room:state':
+        this.emitLocal('room:state', evt.payload);
+        break;
+      case 'room:user-joined':
+        this.emitLocal('room:user-joined', evt.payload);
+        break;
+      case 'room:user-left':
+        this.emitLocal('room:user-left', evt.payload);
+        break;
+    }
+  }
+
+  private async postServerlessSignal(type: string, targetUserId?: string, roomId?: string, payload?: any) {
+    if (typeof window === 'undefined' || !this.currentUser) return;
+    try {
+      await fetch('/api/signaling', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'signal',
+          event: {
+            type,
+            targetUserId,
+            roomId,
+            senderId: this.currentUser.id,
+            payload
+          }
+        })
+      });
+    } catch (e) {}
+  }
+
   public connect() {
     if (!this.socket.connected) {
       this.socket.connect();
@@ -92,33 +189,55 @@ export class SignalingClient {
   }
 
   public disconnect() {
+    if (this.pollInterval) clearInterval(this.pollInterval);
     if (this.socket.connected) {
       this.socket.disconnect();
     }
   }
 
   public register(user: { id: string; name: string; avatar?: string }) {
+    this.currentUser = { ...user, status: 'online' };
     this.socket.emit('user:register', user);
+    if (typeof window !== 'undefined') {
+      fetch('/api/signaling', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'register', user: this.currentUser })
+      }).catch(() => {});
+    }
   }
 
   public joinRoom(roomId: string, isVideo = true) {
     this.socket.emit('room:join', { roomId, isVideo });
+    this.postServerlessSignal('room:user-joined', undefined, roomId, {
+      socketId: this.currentUser?.id || 'http_peer',
+      user: this.currentUser,
+      mediaState: { audio: true, video: isVideo, screen: false },
+      joinedAt: Date.now()
+    });
   }
 
   public leaveRoom(roomId: string) {
     this.socket.emit('room:leave', { roomId });
+    this.postServerlessSignal('room:user-left', undefined, roomId, {
+      socketId: this.currentUser?.id || 'http_peer',
+      userId: this.currentUser?.id
+    });
   }
 
   public sendOffer(targetSocketId: string, sdp: RTCSessionDescriptionInit) {
     this.socket.emit('signal:offer', { targetSocketId, sdp });
+    this.postServerlessSignal('signal:offer', targetSocketId, undefined, { sdp });
   }
 
   public sendAnswer(targetSocketId: string, sdp: RTCSessionDescriptionInit) {
     this.socket.emit('signal:answer', { targetSocketId, sdp });
+    this.postServerlessSignal('signal:answer', targetSocketId, undefined, { sdp });
   }
 
   public sendIceCandidate(targetSocketId: string, candidate: RTCIceCandidateInit) {
     this.socket.emit('signal:ice-candidate', { targetSocketId, candidate });
+    this.postServerlessSignal('signal:ice-candidate', targetSocketId, undefined, { candidate });
   }
 
   public toggleMedia(roomId: string, mediaState: Partial<MediaState>) {
@@ -131,14 +250,35 @@ export class SignalingClient {
 
   public sendDirectMessage(targetUserId: string, text: string, id?: string) {
     this.socket.emit('chat:dm', { targetUserId, text, id });
+    if (this.currentUser) {
+      const msg: ChatMessage = {
+        id: id || `msg_${Date.now()}`,
+        roomId: [this.currentUser.id, targetUserId].sort().join('_chat_'),
+        sender: { id: this.currentUser.id, name: this.currentUser.name, avatar: this.currentUser.avatar },
+        text,
+        timestamp: Date.now(),
+        status: 'delivered'
+      };
+      this.postServerlessSignal('chat:message', targetUserId, undefined, msg);
+    }
   }
 
   public reactToMessage(messageId: string, targetUserId: string, emoji: string) {
     this.socket.emit('chat:react', { messageId, targetUserId, emoji });
+    if (this.currentUser) {
+      this.postServerlessSignal('chat:updated', targetUserId, undefined, {
+        messageId,
+        message: { reactions: [{ emoji, userId: this.currentUser.id, userName: this.currentUser.name }] }
+      });
+    }
   }
 
   public editMessage(messageId: string, targetUserId: string, newText: string) {
     this.socket.emit('chat:edit', { messageId, targetUserId, newText });
+    this.postServerlessSignal('chat:updated', targetUserId, undefined, {
+      messageId,
+      message: { text: newText, isEdited: true }
+    });
   }
 
   public markMessagesRead(targetUserId: string, messageIds: string[]) {
@@ -147,18 +287,44 @@ export class SignalingClient {
 
   public initiateCall(roomId: string, targetUserId: string, isVideo: boolean, callType: CallType = '1:1') {
     this.socket.emit('call:initiate', { roomId, targetUserId, isVideo, callType });
+    if (this.currentUser) {
+      this.postServerlessSignal('call:incoming', targetUserId, roomId, {
+        roomId,
+        caller: this.currentUser,
+        isVideo,
+        callType
+      });
+    }
   }
 
   public acceptCall(roomId: string) {
     this.socket.emit('call:accept', { roomId });
+    if (this.currentUser) {
+      this.postServerlessSignal('call:accepted', undefined, roomId, {
+        roomId,
+        callee: this.currentUser
+      });
+    }
   }
 
   public declineCall(roomId: string) {
     this.socket.emit('call:decline', { roomId });
+    if (this.currentUser) {
+      this.postServerlessSignal('call:declined', undefined, roomId, {
+        roomId,
+        calleeId: this.currentUser.id
+      });
+    }
   }
 
   public endCall(roomId: string) {
     this.socket.emit('call:end', { roomId });
+    if (this.currentUser) {
+      this.postServerlessSignal('call:ended', undefined, roomId, {
+        roomId,
+        endedBy: this.currentUser.id
+      });
+    }
   }
 
   public on<K extends keyof EventMap>(event: K, listener: EventMap[K]) {
@@ -183,6 +349,6 @@ export class SignalingClient {
   }
 
   public get socketId(): string | undefined {
-    return this.socket.id;
+    return this.socket.id || this.currentUser?.id || 'http_peer';
   }
 }

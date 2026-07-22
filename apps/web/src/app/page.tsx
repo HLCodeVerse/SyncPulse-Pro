@@ -24,7 +24,7 @@ import {
   Pin, File, PhoneCall, User as UserIcon, UserPlus, UserCheck, UserSearch,
   Activity, Plus, Camera, Smile, Paperclip, Lock, Radio, Trash2, Reply, Bell,
   Archive, VolumeX, Lightbulb, Image as ImageIcon, ShieldAlert, Cpu, Server,
-  Sliders, UserX, UserCheck as UserCheckIcon, RefreshCw
+  Sliders, UserX, UserCheck as UserCheckIcon, RefreshCw, AlertTriangle
 } from 'lucide-react';
 import {
   askGeminiWithThreadContext,
@@ -38,11 +38,17 @@ import {
 import {
   syncUserIdentity,
   fetchFriendsFromDb,
+  saveFriendshipToDb,
   saveMessageToDb,
+  fetchRoomMessagesFromDb,
   fetchAllUsersFromDb,
+  fetchAllMessagesFromDb,
   updateUserRoleInDb,
   toggleUserSuspensionInDb,
-  DbUser
+  deleteUserFromDb,
+  deleteMessageFromDb,
+  DbUser,
+  DbMessage
 } from '../lib/supabaseClient';
 import { requestNotificationPermission, showBackgroundCallNotification } from '../lib/pushNotifications';
 import {
@@ -90,7 +96,6 @@ const EMOJI_REACTIONS = [
   { type: 'thumbs', label: '👍' },
 ];
 
-/* ✨ Custom Vector Animated SVG AI Icon */
 function AiSparkleIcon({ size = 20, className = '' }: { size?: number; className?: string }) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className={`shrink-0 ${className}`}>
@@ -115,7 +120,6 @@ function isOnlyEmoji(text: string): boolean {
   return emojiRegex.test(clean);
 }
 
-/* Synthetic Audio Notifications */
 function playSound(type: 'message' | 'notification' | 'ring' | 'dial') {
   try {
     const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
@@ -157,7 +161,7 @@ function playSound(type: 'message' | 'notification' | 'ring' | 'dial') {
 
 export default function Home() {
   const [showSplash, setShowSplash] = useState(true);
-  const [splashProgress, setSplashProgress] = useState(50);
+  const [splashProgress, setSplashProgress] = useState(60);
   
   // Auth Form State
   const [userName, setUserName] = useState('');
@@ -183,8 +187,9 @@ export default function Home() {
   const [friendsTab, setFriendsTab] = useState<'find' | 'friends' | 'requests'>('find');
 
   // Admin Dashboard State
-  const [adminTab, setAdminTab] = useState<'overview' | 'users' | 'rooms' | 'system'>('overview');
+  const [adminTab, setAdminTab] = useState<'overview' | 'users' | 'messages' | 'rooms' | 'system'>('overview');
   const [dbUsersList, setDbUsersList] = useState<DbUser[]>([]);
+  const [dbMessagesList, setDbMessagesList] = useState<DbMessage[]>([]);
   const [adminLoading, setAdminLoading] = useState(false);
 
   const [theme, setTheme] = useState<string>(() => {
@@ -239,13 +244,13 @@ export default function Home() {
 
   /* Splash Screen */
   useEffect(() => {
-    const t1 = setTimeout(() => setSplashProgress(95), 150);
-    const t2 = setTimeout(() => setSplashProgress(100), 300);
-    const t3 = setTimeout(() => setShowSplash(false), 450);
+    const t1 = setTimeout(() => setSplashProgress(95), 120);
+    const t2 = setTimeout(() => setSplashProgress(100), 250);
+    const t3 = setTimeout(() => setShowSplash(false), 380);
     return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
   }, []);
 
-  /* Restore Session & Supabase Sync */
+  /* Restore Session, Supabase Sync & DB Hydration */
   useEffect(() => {
     if (typeof window === 'undefined') return;
     requestNotificationPermission();
@@ -272,7 +277,14 @@ export default function Home() {
             try { setFriendProfiles(JSON.parse(savedProfiles)); } catch (e) {}
           }
 
-          const userObj = { id: parsed.id, name: parsed.name, username: parsed.username, phone: parsed.phone, avatar: parsed.avatar, role: parsed.role || 'user', status: 'online' };
+          // Hydrate Friends list directly from Supabase DB
+          fetchFriendsFromDb(parsed.id).then((dbFriends) => {
+            if (dbFriends && dbFriends.length > 0) {
+              setFriends(prev => Array.from(new Set([...prev, ...dbFriends])));
+            }
+          });
+
+          const userObj = { id: parsed.id, name: parsed.name, username: parsed.username, phone: parsed.phone, avatar: parsed.avatar, bio: parsed.bio, role: parsed.role || 'user', status: 'online' };
           setRegisteredUser(userObj as any);
           syncUserIdentity(userObj);
 
@@ -300,16 +312,50 @@ export default function Home() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chatMessages, selectedContact, smartReplyChips]);
 
-  /* Fetch Admin Dashboard Users */
+  /* Fetch Admin Dashboard Users & Messages */
   useEffect(() => {
     if (screen === 'admin') {
       setAdminLoading(true);
-      fetchAllUsersFromDb().then((users) => {
+      Promise.all([fetchAllUsersFromDb(), fetchAllMessagesFromDb()]).then(([users, msgs]) => {
         setDbUsersList(users);
+        setDbMessagesList(msgs);
         setAdminLoading(false);
       });
     }
   }, [screen]);
+
+  /* Hydrate Thread History from Supabase DB on Contact Select */
+  useEffect(() => {
+    if (!selectedContact || !registeredUser) return;
+
+    const roomId = selectedContact.id === AI_BOT_USER.id ? 'pulse_ai_bot' : [registeredUser.id, selectedContact.id].sort().join('_chat_');
+
+    fetchRoomMessagesFromDb(roomId).then((dbMsgs) => {
+      if (dbMsgs && dbMsgs.length > 0) {
+        const formattedMsgs: ChatMessage[] = dbMsgs.map(m => ({
+          id: m.id,
+          roomId: m.room_id,
+          sender: m.sender_id === registeredUser.id
+            ? { id: registeredUser.id, name: registeredUser.name, avatar: registeredUser.avatar }
+            : { id: selectedContact.id, name: selectedContact.name, avatar: selectedContact.avatar },
+          text: m.text,
+          timestamp: new Date(m.created_at).getTime(),
+          status: 'read',
+          isEdited: m.is_edited,
+          isDeleted: m.is_deleted
+        }));
+
+        setChatMessages(prev => {
+          const existingIds = new Set(prev.map(x => x.id));
+          const combined = [...prev];
+          formattedMsgs.forEach(m => {
+            if (!existingIds.has(m.id)) combined.push(m);
+          });
+          return combined.sort((a, b) => a.timestamp - b.timestamp);
+        });
+      }
+    });
+  }, [selectedContact, registeredUser]);
 
   /* Signaling Listeners */
   useEffect(() => {
@@ -408,6 +454,7 @@ export default function Home() {
       setFriends((prev) => Array.from(new Set([...prev, from.id])));
       setFriendProfiles((prev) => ({ ...prev, [from.id]: from }));
       setSentRequests((prev) => prev.filter(id => id !== from.id));
+      if (registeredUser) saveFriendshipToDb(registeredUser.id, from.id, 'accepted');
       setBusyNotice(`🎉 ${from.name} accepted your friend request!`);
       if (soundEnabled) playSound('notification');
       setTimeout(() => setBusyNotice(null), 4000);
@@ -423,7 +470,7 @@ export default function Home() {
     });
 
     return () => { pm.closeAll(); sig.disconnect(); };
-  }, [soundEnabled, activeRoomId]);
+  }, [soundEnabled, activeRoomId, registeredUser]);
 
   /* Actions */
   const handleRegister = (e: React.FormEvent) => {
@@ -439,7 +486,7 @@ export default function Home() {
       localStorage.setItem('syncpulse_session', JSON.stringify(sessionObj));
     }
 
-    const userObj = { id, name: userName.trim(), username: handle, phone, role: userRole, avatar: selectedAvatar, status: 'online' };
+    const userObj = { id, name: userName.trim(), username: handle, phone, role: userRole, avatar: selectedAvatar, bio: userBio, status: 'online' };
     setRegisteredUser(userObj as any);
     syncUserIdentity(userObj);
 
@@ -462,6 +509,7 @@ export default function Home() {
     sigRef.current?.sendFriendRequest(targetUser.id);
     setSentRequests((prev) => Array.from(new Set([...prev, targetUser.id])));
     setFriendProfiles((prev) => ({ ...prev, [targetUser.id]: targetUser }));
+    if (registeredUser) saveFriendshipToDb(registeredUser.id, targetUser.id, 'pending');
     setBusyNotice(`Friend request sent to ${targetUser.name}!`);
     if (soundEnabled) playSound('notification');
     setTimeout(() => setBusyNotice(null), 3500);
@@ -472,6 +520,7 @@ export default function Home() {
     setFriends((prev) => Array.from(new Set([...prev, targetUser.id])));
     setFriendProfiles((prev) => ({ ...prev, [targetUser.id]: targetUser }));
     setFriendRequests((prev) => prev.filter((u) => u.id !== targetUser.id));
+    if (registeredUser) saveFriendshipToDb(registeredUser.id, targetUser.id, 'accepted');
     setBusyNotice(`You are now friends with ${targetUser.name}!`);
     if (soundEnabled) playSound('notification');
     setTimeout(() => setBusyNotice(null), 3500);
@@ -630,8 +679,9 @@ export default function Home() {
       const aiReplyText = await askGeminiWithThreadContext(content, threadContext);
       setIsAiThinking(false);
 
+      const aiMsgId = `msg_${Date.now()}_ai`;
       const aiMsg: ChatMessage = {
-        id: `msg_${Date.now()}_ai`,
+        id: aiMsgId,
         roomId: 'pulse_ai_bot',
         sender: { id: AI_BOT_USER.id, name: AI_BOT_USER.name, avatar: AI_BOT_USER.avatar },
         text: aiReplyText,
@@ -639,6 +689,7 @@ export default function Home() {
         status: 'read'
       };
       setChatMessages((prev) => [...prev, aiMsg]);
+      saveMessageToDb({ id: aiMsgId, roomId: 'pulse_ai_bot', senderId: AI_BOT_USER.id, text: aiReplyText });
     } else {
       sigRef.current?.sendDirectMessage(selectedContact.id, content, msgId);
     }
@@ -647,6 +698,7 @@ export default function Home() {
   const handleDeleteMessage = (msgId: string) => {
     if (!selectedContact) return;
     setChatMessages(prev => prev.map(m => m.id === msgId ? { ...m, text: '🚫 This message was deleted', isDeleted: true } : m));
+    deleteMessageFromDb(msgId);
     if (selectedContact.id !== AI_BOT_USER.id) {
       sigRef.current?.deleteMessage(msgId, selectedContact.id);
     }
@@ -703,9 +755,31 @@ export default function Home() {
     setDbUsersList(prev => prev.map(u => u.id === userId ? { ...u, is_suspended: !isSuspended } : u));
   };
 
-  /* Online & Cached Friend Contacts */
+  const handleAdminDeleteUser = async (userId: string) => {
+    if (confirm("Are you sure you want to permanently delete this user from Supabase Postgres?")) {
+      await deleteUserFromDb(userId);
+      setDbUsersList(prev => prev.filter(u => u.id !== userId));
+    }
+  };
+
+  const handleAdminDeleteMessage = async (msgId: string) => {
+    await deleteMessageFromDb(msgId);
+    setDbMessagesList(prev => prev.filter(m => m.id !== msgId));
+  };
+
+  /* Online & Cached Friend Contacts with Live Status */
   const others = onlineUsers.filter((u) => u.id !== registeredUser?.id);
-  const friendUserObjects = friends.map(id => friendProfiles[id] || others.find(u => u.id === id) || { id, name: `Friend ${id.slice(-4)}`, avatar: AVATAR_PRESETS[0], status: 'online' });
+  const friendUserObjects: User[] = friends.map(id => {
+    const online = others.find(u => u.id === id);
+    const cached = friendProfiles[id];
+    return {
+      id,
+      name: online?.name || cached?.name || `Friend ${id.slice(-4)}`,
+      avatar: online?.avatar || cached?.avatar || AVATAR_PRESETS[0],
+      status: (online ? 'online' : 'offline') as 'online' | 'offline' | 'in-call'
+    };
+  });
+
   const contactsList = [AI_BOT_USER, ...friendUserObjects];
   const filteredContacts = contactsList.filter((c) => c.name.toLowerCase().includes(searchQuery.toLowerCase()));
 
@@ -747,7 +821,7 @@ export default function Home() {
     );
   }
 
-  /* Full Screen Login Screen (Mobile, Username, Full Name & Role Credentials) */
+  /* Full Screen Login Screen */
   if (!registeredUser) {
     return (
       <div className="fixed inset-0 w-screen h-screen flex flex-col lg:flex-row overflow-hidden z-50 bg-black">
@@ -761,13 +835,13 @@ export default function Home() {
 
           <div className="space-y-4 max-w-md">
             <span className="px-3 py-1 rounded-full text-[11px] font-semibold bg-red-500/10 text-red-400 border border-red-500/30 inline-flex items-center gap-1.5">
-              <Radio size={13} className="animate-pulse" /> AMOLED AI & WebRTC Network
+              <Radio size={13} className="animate-pulse" /> Live Supabase & WebRTC Platform
             </span>
             <h1 className="text-3xl xl:text-4xl font-extrabold tracking-tight text-white leading-tight">
-              Enterprise WebRTC & Admin Control Platform
+              Enterprise WebRTC & Real-time Admin Dashboard
             </h1>
             <p className="text-xs text-slate-400 leading-relaxed font-medium">
-              Ultra low-latency P2P video calls, real-time messaging, multi-user audio studio, mobile phone auth, and Admin Dashboard.
+              Ultra low-latency P2P video calls, real-time messaging, Supabase Postgres database persistence, mobile phone auth, and Admin Dashboard.
             </p>
           </div>
 
@@ -972,13 +1046,14 @@ export default function Home() {
                     const last = getLastMsg(c);
                     const unread = getUnreadCount(c);
                     const isAi = c.id === AI_BOT_USER.id;
+                    const isOnline = c.status === 'online' || isAi;
 
                     return (
                       <div key={c.id} onClick={() => setSelectedContact(c)}
                         className={`flex items-center gap-2.5 p-2.5 rounded-xl cursor-pointer transition-all ${isSel ? 'bg-white/10 border border-white/10' : 'hover:bg-white/5'}`}>
                         <div className="relative shrink-0">
                           <img src={c.avatar} alt="" className="w-9 h-9 rounded-full object-cover ring-1 ring-white/10" />
-                          <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full" style={{ background: isAi ? '#ff453a' : '#30d158', border: '2px solid #08090c' }} />
+                          <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full" style={{ background: isOnline ? '#30d158' : '#8e8e93', border: '2px solid #08090c' }} />
                         </div>
 
                         <div className="flex-1 min-w-0">
@@ -1022,7 +1097,9 @@ export default function Home() {
                         <h4 className="text-xs font-bold text-white flex items-center gap-1">
                           {selectedContact.name} {selectedContact.id === AI_BOT_USER.id && <AiSparkleIcon size={12} />}
                         </h4>
-                        <span className="text-[10px] text-emerald-400">Active Now</span>
+                        <span className={`text-[10px] ${selectedContact.status === 'online' || selectedContact.id === AI_BOT_USER.id ? 'text-emerald-400' : 'text-slate-500'}`}>
+                          {selectedContact.status === 'online' || selectedContact.id === AI_BOT_USER.id ? '● Active Now' : 'Offline'}
+                        </span>
                       </div>
                     </div>
 
@@ -1121,9 +1198,10 @@ export default function Home() {
                 <h2 className="text-sm font-bold text-white flex items-center gap-2">
                   <ShieldAlert size={16} className="text-red-500" /> Admin Command Dashboard
                 </h2>
-                <div className="flex gap-1.5">
+                <div className="flex gap-1.5 overflow-x-auto">
                   <button onClick={() => setAdminTab('overview')} className={`px-3 py-1 rounded-lg text-xs font-medium ${adminTab === 'overview' ? 'bg-red-500 text-white' : 'text-slate-400'}`}>Overview</button>
                   <button onClick={() => setAdminTab('users')} className={`px-3 py-1 rounded-lg text-xs font-medium ${adminTab === 'users' ? 'bg-red-500 text-white' : 'text-slate-400'}`}>Users ({dbUsersList.length})</button>
+                  <button onClick={() => setAdminTab('messages')} className={`px-3 py-1 rounded-lg text-xs font-medium ${adminTab === 'messages' ? 'bg-red-500 text-white' : 'text-slate-400'}`}>Messages ({dbMessagesList.length})</button>
                   <button onClick={() => setAdminTab('rooms')} className={`px-3 py-1 rounded-lg text-xs font-medium ${adminTab === 'rooms' ? 'bg-red-500 text-white' : 'text-slate-400'}`}>Rooms</button>
                   <button onClick={() => setAdminTab('system')} className={`px-3 py-1 rounded-lg text-xs font-medium ${adminTab === 'system' ? 'bg-red-500 text-white' : 'text-slate-400'}`}>System</button>
                 </div>
@@ -1142,8 +1220,8 @@ export default function Home() {
                         <h3 className="text-xl font-extrabold text-emerald-400">{onlineUsers.length || 1}</h3>
                       </div>
                       <div className="matte-card p-4 space-y-1">
-                        <span className="text-[10px] font-bold uppercase text-slate-400">Active WebRTC Calls</span>
-                        <h3 className="text-xl font-extrabold text-red-400">{activeRoomId ? 1 : 0}</h3>
+                        <span className="text-[10px] font-bold uppercase text-slate-400">Messages Persisted</span>
+                        <h3 className="text-xl font-extrabold text-purple-400">{dbMessagesList.length}</h3>
                       </div>
                       <div className="matte-card p-4 space-y-1">
                         <span className="text-[10px] font-bold uppercase text-slate-400">System Health</span>
@@ -1180,7 +1258,7 @@ export default function Home() {
 
                     <div className="space-y-2">
                       {dbUsersList.map((u) => (
-                        <div key={u.id} className="flex items-center justify-between p-3.5 matte-card">
+                        <div key={u.id} className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-3.5 matte-card gap-2">
                           <div className="flex items-center gap-3">
                             <img src={u.avatar_url || AVATAR_PRESETS[0]} alt="" className="w-9 h-9 rounded-full object-cover ring-1 ring-white/10" />
                             <div>
@@ -1193,14 +1271,37 @@ export default function Home() {
                             </div>
                           </div>
 
-                          <div className="flex gap-2">
+                          <div className="flex gap-1.5 flex-wrap">
                             <button onClick={() => handleAdminToggleUserRole(u.id, u.role)} className="px-2.5 py-1 rounded-lg text-xs bg-white/5 text-white hover:bg-white/10">
-                              {u.role === 'admin' ? 'Demote to User' : 'Make Admin'}
+                              {u.role === 'admin' ? 'Demote' : 'Make Admin'}
                             </button>
-                            <button onClick={() => handleAdminToggleUserSuspension(u.id, !!u.is_suspended)} className={`px-2.5 py-1 rounded-lg text-xs font-semibold ${u.is_suspended ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}`}>
+                            <button onClick={() => handleAdminToggleUserSuspension(u.id, !!u.is_suspended)} className={`px-2.5 py-1 rounded-lg text-xs font-semibold ${u.is_suspended ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'}`}>
                               {u.is_suspended ? 'Unsuspend' : 'Suspend'}
                             </button>
+                            <button onClick={() => handleAdminDeleteUser(u.id)} className="px-2 py-1 rounded-lg text-xs bg-red-500/20 text-red-400"><Trash2 size={12} /></button>
                           </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {adminTab === 'messages' && (
+                  <div className="max-w-4xl mx-auto space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-xs font-bold text-white">Live Messages & Moderation Log</h3>
+                      <button onClick={() => fetchAllMessagesFromDb().then(setDbMessagesList)} className="p-1.5 rounded-lg bg-white/5 text-slate-300 text-xs flex items-center gap-1"><RefreshCw size={12} /> Refresh</button>
+                    </div>
+
+                    <div className="space-y-2">
+                      {dbMessagesList.map((m) => (
+                        <div key={m.id} className="flex items-center justify-between p-3 matte-card text-xs">
+                          <div>
+                            <span className="text-red-400 font-bold">Room: {m.room_id.slice(0, 16)}</span>
+                            <p className="text-white mt-0.5">{m.text}</p>
+                            <span className="text-[10px] text-slate-500">{new Date(m.created_at).toLocaleString()}</span>
+                          </div>
+                          <button onClick={() => handleAdminDeleteMessage(m.id)} className="p-2 rounded-lg bg-red-500/20 text-red-400"><Trash2 size={13} /></button>
                         </div>
                       ))}
                     </div>

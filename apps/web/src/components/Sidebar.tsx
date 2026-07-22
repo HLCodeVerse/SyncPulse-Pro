@@ -18,12 +18,14 @@ interface SidebarProps {
 export function Sidebar({
   screen, setScreen, setSelectedContact, registeredUser, friendRequestsCount, handleLogout
 }: SidebarProps) {
-  const NAV_ITEMS = [
+  const isAdmin = registeredUser?.role === 'admin';
+
+  const ALL_NAV_ITEMS = [
     { key: 'chats' as Screen, icon: MessageSquare, label: 'Chats' },
     { key: 'calls' as Screen, icon: PhoneCall, label: 'Calls' },
     { key: 'friends' as Screen, icon: Users, label: 'Friends', badge: friendRequestsCount },
     { key: 'ai-studio' as Screen, icon: Wand2, label: 'AI' },
-    { key: 'admin' as Screen, icon: ShieldAlert, label: 'Admin', badge: registeredUser?.role === 'admin' ? 1 : undefined },
+    ...(isAdmin ? [{ key: 'admin' as Screen, icon: ShieldAlert, label: 'Admin', badge: 1 }] : []),
     { key: 'profile' as Screen, icon: UserIcon, label: 'Profile' },
     { key: 'settings' as Screen, icon: Settings, label: 'Settings' },
   ];
@@ -36,7 +38,7 @@ export function Sidebar({
           <AiSparkleIcon size={20} />
         </div>
 
-        {NAV_ITEMS.map((nav) => {
+        {ALL_NAV_ITEMS.map((nav) => {
           const active = screen === nav.key;
           return (
             <button key={nav.key} onClick={() => { setScreen(nav.key); if (nav.key !== 'chats') setSelectedContact(null); }}
@@ -65,7 +67,7 @@ export function Sidebar({
 
       {/* Mobile Bottom Navigation Bar */}
       <nav className="md:hidden flex items-center justify-around h-14 shrink-0 z-40 bg-black/95 backdrop-blur-2xl border-t border-white/10 px-2">
-        {NAV_ITEMS.map((nav) => {
+        {ALL_NAV_ITEMS.map((nav) => {
           const active = screen === nav.key;
           return (
             <button key={nav.key} onClick={() => { setScreen(nav.key); if (nav.key !== 'chats') setSelectedContact(null); }}

@@ -1,7 +1,7 @@
 'use client';
 
-import React from 'react';
-import { Radio } from 'lucide-react';
+import React, { useState } from 'react';
+import { Radio, Lock, ShieldAlert, Sparkles, UserCheck, Phone, User as UserIcon, Key } from 'lucide-react';
 import { AiSparkleIcon } from './SplashView';
 
 interface LoginViewProps {
@@ -28,11 +28,29 @@ export function LoginView({
   AVATAR_PRESETS,
   handleRegister
 }: LoginViewProps) {
+  const [isRegisterMode, setIsRegisterMode] = useState(false);
+  const [isAdminPortalMode, setIsAdminPortalMode] = useState(false);
+  const [adminPasscode, setAdminPasscode] = useState('');
+
+  const onFormSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (isAdminPortalMode) {
+      if (adminPasscode !== 'admin123' && adminPasscode !== 'Chandan@9777767188') {
+        alert("Invalid Admin Passcode! Access Denied.");
+        return;
+      }
+      setUserRole('admin');
+      if (!userName.trim()) setUserName('System Super Admin');
+    }
+    handleRegister(e);
+  };
+
   return (
     <div className="fixed inset-0 w-screen h-screen flex flex-col lg:flex-row overflow-hidden z-50 bg-black">
-      <div className="hidden lg:flex w-1/2 h-full flex-col justify-between p-12 relative border-r border-white/10 bg-[#07080b]">
+      {/* Left Feature Showcase */}
+      <div className="hidden lg:flex w-1/2 h-full flex-col justify-between p-12 relative border-r border-white/10 bg-[#06070a]">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-red-500 flex items-center justify-center text-white font-bold">
+          <div className="w-10 h-10 rounded-xl bg-red-500 flex items-center justify-center text-white font-bold shadow-lg shadow-red-500/20">
             <AiSparkleIcon size={22} />
           </div>
           <h2 className="text-xl font-black text-white tracking-tight">SyncPulse <span className="text-red-500">Pro</span></h2>
@@ -40,23 +58,33 @@ export function LoginView({
 
         <div className="space-y-4 max-w-md">
           <span className="px-3 py-1 rounded-full text-[11px] font-semibold bg-red-500/10 text-red-400 border border-red-500/30 inline-flex items-center gap-1.5">
-            <Radio size={13} className="animate-pulse" /> Live Supabase & WebRTC Platform
+            <Radio size={13} className="animate-pulse" /> AMOLED AI & WebRTC Platform
           </span>
           <h1 className="text-3xl xl:text-4xl font-extrabold tracking-tight text-white leading-tight">
-            Enterprise WebRTC & Real-time Admin Dashboard
+            {isAdminPortalMode ? 'Isolated Admin Control Command Panel' : 'Enterprise Real-Time Student Communication Hub'}
           </h1>
           <p className="text-xs text-slate-400 leading-relaxed font-medium">
-            Ultra low-latency P2P video calls, real-time messaging, Supabase Postgres database persistence, mobile phone auth, and Admin Dashboard.
+            {isAdminPortalMode
+              ? 'Authorized Administrator Portal for managing user credentials, monitoring active call streams, and controlling system settings.'
+              : 'Connect with peers via ultra-low latency WebRTC video calls, instant messaging, and Gemini AI assistant.'}
           </p>
         </div>
 
-        <div className="text-[11px] text-slate-600 font-medium">
-          © 2026 SyncPulse Pro · Modular Architecture
+        <div className="text-[11px] text-slate-600 font-medium flex items-center justify-between">
+          <span>© 2026 SyncPulse Pro · Secure Architecture</span>
+          <button
+            type="button"
+            onClick={() => { setIsAdminPortalMode(!isAdminPortalMode); setUserRole(isAdminPortalMode ? 'user' : 'admin'); }}
+            className="text-[10px] text-slate-500 hover:text-red-400 underline flex items-center gap-1"
+          >
+            <ShieldAlert size={12} /> {isAdminPortalMode ? 'Return to Student Login' : 'Admin Portal Access'}
+          </button>
         </div>
       </div>
 
-      <div className="flex-1 h-full flex flex-col items-center justify-center p-6 bg-black overflow-y-auto">
-        <form onSubmit={handleRegister} className="w-full max-w-sm space-y-4 my-auto">
+      {/* Right Login / Registration Form */}
+      <div className="flex-1 h-full flex flex-col items-center justify-center p-6 bg-black overflow-y-auto relative">
+        <form onSubmit={onFormSubmit} className="w-full max-w-sm space-y-4 my-auto relative z-10">
           <div className="lg:hidden flex flex-col items-center text-center mb-1">
             <div className="w-12 h-12 rounded-2xl bg-red-500 flex items-center justify-center text-white mb-2 shadow-lg">
               <AiSparkleIcon size={26} />
@@ -64,45 +92,92 @@ export function LoginView({
             <h1 className="text-lg font-extrabold text-white">SyncPulse Pro</h1>
           </div>
 
-          <div className="matte-card p-6 space-y-4">
-            <h2 className="text-base font-bold text-white tracking-tight">Sign In / Register</h2>
+          <div className="matte-card p-6 space-y-4 border border-white/10 shadow-2xl backdrop-blur-2xl bg-[#0b0c10]/90">
+            {isAdminPortalMode ? (
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 text-red-500">
+                  <ShieldAlert size={18} />
+                  <h2 className="text-base font-bold text-white tracking-tight">Admin System Authentication</h2>
+                </div>
+                <p className="text-[11px] text-slate-400">Enter master administrator passcode to access command panel:</p>
 
-            <div>
-              <label className="block text-[10px] font-bold uppercase tracking-wider mb-2 text-slate-400">Choose Profile Avatar</label>
-              <div className="flex justify-between gap-2">
-                {AVATAR_PRESETS.map((url, i) => (
-                  <img key={i} src={url} alt="" onClick={() => setSelectedAvatar(url)} className="w-9 h-9 rounded-full object-cover cursor-pointer transition-all hover:scale-110" style={{ border: selectedAvatar === url ? '2px solid #ff453a' : '2px solid transparent' }} />
-                ))}
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider mb-1 text-slate-400">Admin Username</label>
+                  <input type="text" value={userName} onChange={(e) => setUserName(e.target.value)} placeholder="admin" className="matte-input !py-2 text-xs" required />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider mb-1 text-slate-400">Master Admin Passcode</label>
+                  <input type="password" value={adminPasscode} onChange={(e) => setAdminPasscode(e.target.value)} placeholder="••••••••" className="matte-input !py-2 text-xs" required />
+                </div>
+
+                <button type="submit" className="app-btn app-btn-primary w-full py-2.5 text-xs font-bold shadow-md flex items-center justify-center gap-2">
+                  <Lock size={15} /> Authenticate Admin Portal
+                </button>
               </div>
-            </div>
+            ) : isRegisterMode ? (
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-base font-bold text-white tracking-tight">Create Student Account</h2>
+                  <button type="button" onClick={() => setIsRegisterMode(false)} className="text-xs text-red-400 font-semibold hover:underline">
+                    Back to Login
+                  </button>
+                </div>
 
-            <div>
-              <label className="block text-[10px] font-bold uppercase tracking-wider mb-1 text-slate-400">Full Name</label>
-              <input type="text" value={userName} onChange={(e) => setUserName(e.target.value)} placeholder="e.g. Sarah Sanders" className="matte-input !py-1.5 text-xs" required autoFocus />
-            </div>
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider mb-2 text-slate-400">Choose Profile Avatar</label>
+                  <div className="flex justify-between gap-2">
+                    {AVATAR_PRESETS.map((url, i) => (
+                      <img key={i} src={url} alt="" onClick={() => setSelectedAvatar(url)} className="w-9 h-9 rounded-full object-cover cursor-pointer transition-all hover:scale-110" style={{ border: selectedAvatar === url ? '2px solid #ff453a' : '2px solid transparent' }} />
+                    ))}
+                  </div>
+                </div>
 
-            <div className="grid grid-cols-2 gap-2">
-              <div>
-                <label className="block text-[10px] font-bold uppercase tracking-wider mb-1 text-slate-400">Username</label>
-                <input type="text" value={userHandle} onChange={(e) => setUserHandle(e.target.value)} placeholder="e.g. sarah_dev" className="matte-input !py-1.5 text-xs" />
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider mb-1 text-slate-400">Full Display Name</label>
+                  <input type="text" value={userName} onChange={(e) => setUserName(e.target.value)} placeholder="e.g. Sarah Sanders" className="matte-input !py-1.5 text-xs" required autoFocus />
+                </div>
+
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider mb-1 text-slate-400">Username</label>
+                    <input type="text" value={userHandle} onChange={(e) => setUserHandle(e.target.value)} placeholder="sarah_dev" className="matte-input !py-1.5 text-xs" required />
+                  </div>
+                  <div>
+                    <label className="block text-[10px] font-bold uppercase tracking-wider mb-1 text-slate-400">Mobile Phone</label>
+                    <input type="text" value={userPhone} onChange={(e) => setUserPhone(e.target.value)} placeholder="+1 555 1234" className="matte-input !py-1.5 text-xs" />
+                  </div>
+                </div>
+
+                <button type="submit" className="app-btn app-btn-primary w-full py-2.5 text-xs font-bold shadow-md flex items-center justify-center gap-2">
+                  <UserCheck size={16} /> Complete Registration
+                </button>
               </div>
-              <div>
-                <label className="block text-[10px] font-bold uppercase tracking-wider mb-1 text-slate-400">Mobile Phone</label>
-                <input type="text" value={userPhone} onChange={(e) => setUserPhone(e.target.value)} placeholder="+1 555 123 4567" className="matte-input !py-1.5 text-xs" />
+            ) : (
+              <div className="space-y-4">
+                <h2 className="text-base font-bold text-white tracking-tight">Sign In to SyncPulse</h2>
+
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider mb-1 text-slate-400">Full Name or Username</label>
+                  <input type="text" value={userName} onChange={(e) => setUserName(e.target.value)} placeholder="e.g. Sarah Sanders" className="matte-input !py-2 text-xs" required autoFocus />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider mb-1 text-slate-400">Mobile Phone (Optional)</label>
+                  <input type="text" value={userPhone} onChange={(e) => setUserPhone(e.target.value)} placeholder="+1 555 1234" className="matte-input !py-2 text-xs" />
+                </div>
+
+                <button type="submit" className="app-btn app-btn-primary w-full py-2.5 text-xs font-bold shadow-md flex items-center justify-center gap-2">
+                  <AiSparkleIcon size={16} /> Sign In to Workspace
+                </button>
+
+                <div className="pt-2 text-center border-t border-white/5">
+                  <button type="button" onClick={() => setIsRegisterMode(true)} className="text-xs text-slate-400 hover:text-white transition-colors">
+                    Don't have an account? <strong className="text-red-400 underline">Register here</strong>
+                  </button>
+                </div>
               </div>
-            </div>
-
-            <div>
-              <label className="block text-[10px] font-bold uppercase tracking-wider mb-1 text-slate-400">Account Access Role</label>
-              <select value={userRole} onChange={(e) => setUserRole(e.target.value as any)} className="matte-input !py-1.5 text-xs text-white">
-                <option value="user" className="bg-slate-900 text-white">Standard User</option>
-                <option value="admin" className="bg-slate-900 text-white">System Admin (Access Dashboard)</option>
-              </select>
-            </div>
-
-            <button type="submit" className="app-btn app-btn-primary w-full py-2.5 text-xs font-bold shadow-md flex items-center justify-center gap-2">
-              <AiSparkleIcon size={16} /> Enter Platform
-            </button>
+            )}
           </div>
         </form>
       </div>

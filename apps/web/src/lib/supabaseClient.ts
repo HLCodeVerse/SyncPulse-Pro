@@ -1,7 +1,7 @@
 /* Supabase REST API & Database Management Helpers */
 
-const SUPABASE_URL = 'https://fbgwhkgvrfutahjjuwct.supabase.co';
-const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImZiZ3doa2d2cmZ1dGFoamp1d2N0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3MzczMDgwNzMsImV4cCI6MjA1Mjg4NDA3M30.placeholder';
+const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://fbgwhkgvrfutahjjuwct.supabase.co';
+const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
 
 export interface DbUser {
   id: string;
@@ -31,6 +31,7 @@ export interface DbMessage {
 }
 
 export async function syncUserIdentity(user: { id: string; name: string; username?: string; phone?: string; avatar?: string; bio?: string; role?: 'user' | 'admin' }) {
+  if (!SUPABASE_ANON_KEY) return null;
   try {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/users`, {
       method: 'POST',
@@ -59,6 +60,7 @@ export async function syncUserIdentity(user: { id: string; name: string; usernam
 }
 
 export async function fetchFriendsFromDb(userId: string): Promise<string[]> {
+  if (!SUPABASE_ANON_KEY) return [];
   try {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/friendships?or=(user_id_1.eq.${userId},user_id_2.eq.${userId})&status=eq.accepted`, {
       headers: {
@@ -66,7 +68,6 @@ export async function fetchFriendsFromDb(userId: string): Promise<string[]> {
         'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
       }
     });
-
     if (!res.ok) return [];
     const data = await res.json();
     return data.map((f: any) => f.user_id_1 === userId ? f.user_id_2 : f.user_id_1);
@@ -76,6 +77,7 @@ export async function fetchFriendsFromDb(userId: string): Promise<string[]> {
 }
 
 export async function saveFriendshipToDb(userId1: string, userId2: string, status: 'pending' | 'accepted' | 'rejected' = 'accepted') {
+  if (!SUPABASE_ANON_KEY) return;
   try {
     const [u1, u2] = [userId1, userId2].sort();
     await fetch(`${SUPABASE_URL}/rest/v1/friendships`, {
@@ -98,6 +100,7 @@ export async function saveFriendshipToDb(userId1: string, userId2: string, statu
 }
 
 export async function saveMessageToDb(msg: { id: string; roomId: string; senderId: string; text: string }) {
+  if (!SUPABASE_ANON_KEY) return;
   try {
     await fetch(`${SUPABASE_URL}/rest/v1/messages`, {
       method: 'POST',
@@ -117,6 +120,7 @@ export async function saveMessageToDb(msg: { id: string; roomId: string; senderI
 }
 
 export async function fetchRoomMessagesFromDb(roomId: string): Promise<DbMessage[]> {
+  if (!SUPABASE_ANON_KEY) return [];
   try {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/messages?room_id=eq.${encodeURIComponent(roomId)}&order=created_at.asc`, {
       headers: {
@@ -124,7 +128,6 @@ export async function fetchRoomMessagesFromDb(roomId: string): Promise<DbMessage
         'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
       }
     });
-
     if (!res.ok) return [];
     return await res.json();
   } catch (e) {
@@ -134,6 +137,7 @@ export async function fetchRoomMessagesFromDb(roomId: string): Promise<DbMessage
 
 /* ADMIN DASHBOARD DB HELPERS */
 export async function fetchAllUsersFromDb(): Promise<DbUser[]> {
+  if (!SUPABASE_ANON_KEY) return [];
   try {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/users?select=*&order=created_at.desc`, {
       headers: {
@@ -149,6 +153,7 @@ export async function fetchAllUsersFromDb(): Promise<DbUser[]> {
 }
 
 export async function fetchAllMessagesFromDb(): Promise<DbMessage[]> {
+  if (!SUPABASE_ANON_KEY) return [];
   try {
     const res = await fetch(`${SUPABASE_URL}/rest/v1/messages?select=*&order=created_at.desc&limit=50`, {
       headers: {
@@ -164,6 +169,7 @@ export async function fetchAllMessagesFromDb(): Promise<DbMessage[]> {
 }
 
 export async function updateUserRoleInDb(userId: string, newRole: 'user' | 'admin') {
+  if (!SUPABASE_ANON_KEY) return;
   try {
     await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${userId}`, {
       method: 'PATCH',
@@ -178,6 +184,7 @@ export async function updateUserRoleInDb(userId: string, newRole: 'user' | 'admi
 }
 
 export async function toggleUserSuspensionInDb(userId: string, isSuspended: boolean) {
+  if (!SUPABASE_ANON_KEY) return;
   try {
     await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${userId}`, {
       method: 'PATCH',
@@ -192,6 +199,7 @@ export async function toggleUserSuspensionInDb(userId: string, isSuspended: bool
 }
 
 export async function deleteUserFromDb(userId: string) {
+  if (!SUPABASE_ANON_KEY) return;
   try {
     await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${userId}`, {
       method: 'DELETE',
@@ -204,6 +212,7 @@ export async function deleteUserFromDb(userId: string) {
 }
 
 export async function deleteMessageFromDb(messageId: string) {
+  if (!SUPABASE_ANON_KEY) return;
   try {
     await fetch(`${SUPABASE_URL}/rest/v1/messages?id=eq.${messageId}`, {
       method: 'DELETE',

@@ -9,9 +9,9 @@ export function getDbPool() {
     pool = new Pool({
       connectionString,
       ssl: { rejectUnauthorized: false },
-      max: 10,
-      idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 5000,
+      max: 1,
+      idleTimeoutMillis: 1000,
+      connectionTimeoutMillis: 2000,
     });
   }
   return pool;

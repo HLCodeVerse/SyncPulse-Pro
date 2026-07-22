@@ -14,17 +14,14 @@ import {
   ControlBar,
   CallModal,
   NetworkQualityBadge,
-  CallLogItem,
-  ThemeKey
+  CallLogItem
 } from '@webrtc/ui';
 import {
   Phone, Video, PhoneOff, Mic, MicOff, VideoOff, Monitor, MessageSquare,
   Search, Send, CheckCheck, Check, ArrowLeft, Settings, LogOut, Users, Zap,
   X, Sparkles, Hash, Edit2, Bot, Wand2, Globe2, ShieldCheck,
   Pin, File, PhoneCall, User as UserIcon, UserPlus, UserCheck, UserSearch,
-  Activity, Plus, Camera, Smile, Paperclip, Lock, Radio, Trash2, Reply, Bell,
-  Archive, VolumeX, Lightbulb, Image as ImageIcon, ShieldAlert, Cpu, Server,
-  Sliders, UserX, UserCheck as UserCheckIcon, RefreshCw, AlertTriangle
+  Activity, Plus, Camera, Smile, Paperclip, Lock, Radio, Trash2, Reply, Bell
 } from 'lucide-react';
 import {
   askGeminiWithThreadContext,
@@ -59,6 +56,14 @@ import {
   AnimatedReactionIcon,
   AnimatedBellIcon
 } from '../../../../packages/icons/src/AnimatedIcons';
+
+// Modular Sub-Components
+import { AiSparkleIcon, SplashView } from '../components/SplashView';
+import { LoginView } from '../components/LoginView';
+import { Sidebar } from '../components/Sidebar';
+import { AdminDashboardView } from '../components/AdminDashboardView';
+import { FriendsView } from '../components/FriendsView';
+import { AiStudioView } from '../components/AiStudioView';
 
 const SIGNALING_URL = process.env.NEXT_PUBLIC_SIGNALING_URL || 'http://localhost:4000';
 
@@ -95,23 +100,6 @@ const EMOJI_REACTIONS = [
   { type: 'fire', label: '🔥' },
   { type: 'thumbs', label: '👍' },
 ];
-
-function AiSparkleIcon({ size = 20, className = '' }: { size?: number; className?: string }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className={`shrink-0 ${className}`}>
-      <circle cx="12" cy="12" r="9" stroke="url(#aiGrad)" strokeWidth="1.5" strokeDasharray="3 3" className="animate-spin" style={{ animationDuration: '6s' }} />
-      <path d="M12 3V6M12 18V21M3 12H6M18 12H21M6.343 6.343L8.464 8.464M15.536 15.536L17.657 17.657M6.343 17.657L8.464 15.536M15.536 8.464L17.657 6.343" stroke="url(#aiGrad)" strokeWidth="1.2" strokeLinecap="round" />
-      <path d="M12 8L13.2 10.8L16 12L13.2 13.2L12 16L10.8 13.2L8 12L10.8 10.8L12 8Z" fill="url(#aiGrad)" className="animate-pulse" />
-      <defs>
-        <linearGradient id="aiGrad" x1="0" y1="0" x2="24" y2="24" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#ff453a" />
-          <stop offset="0.5" stopColor="#bf5af2" />
-          <stop offset="1" stopColor="#30d158" />
-        </linearGradient>
-      </defs>
-    </svg>
-  );
-}
 
 function isOnlyEmoji(text: string): boolean {
   const clean = text.trim();
@@ -229,9 +217,6 @@ export default function Home() {
   const [showAiMenu, setShowAiMenu] = useState(false);
 
   const [selectedFile, setSelectedFile] = useState<{ name: string; size: string } | null>(null);
-  const [isVoiceRecording, setIsVoiceRecording] = useState(false);
-  const [recordingSeconds, setRecordingSeconds] = useState(0);
-
   const [summaryModalText, setSummaryModalText] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -277,7 +262,6 @@ export default function Home() {
             try { setFriendProfiles(JSON.parse(savedProfiles)); } catch (e) {}
           }
 
-          // Hydrate Friends list directly from Supabase DB
           fetchFriendsFromDb(parsed.id).then((dbFriends) => {
             if (dbFriends && dbFriends.length > 0) {
               setFriends(prev => Array.from(new Set([...prev, ...dbFriends])));
@@ -801,111 +785,27 @@ export default function Home() {
     return chatMessages.filter((m) => m.roomId === rid && m.sender.id === c.id && m.status !== 'read').length;
   };
 
-  /* Splash Screen */
+  /* 1. Splash View */
   if (showSplash) {
-    return (
-      <div className="fixed inset-0 w-screen h-screen flex flex-col items-center justify-center relative overflow-hidden anim-fade z-50 bg-black">
-        <div className="relative z-10 flex flex-col items-center text-center p-6 max-w-sm w-full">
-          <div className="w-16 h-16 rounded-2xl flex items-center justify-center bg-red-500 mb-4 shadow-lg">
-            <AiSparkleIcon size={36} />
-          </div>
-          <h1 className="text-2xl font-extrabold tracking-tight text-white mb-1">
-            SyncPulse <span className="text-red-500">Pro</span>
-          </h1>
-          <p className="text-[11px] text-slate-400 font-medium mb-6">AMOLED AI & WebRTC Network</p>
-          <div className="w-full bg-slate-900 h-1.5 rounded-full overflow-hidden border border-white/10 mb-2">
-            <div className="h-full bg-red-500 rounded-full transition-all duration-500" style={{ width: `${splashProgress}%` }} />
-          </div>
-        </div>
-      </div>
-    );
+    return <SplashView splashProgress={splashProgress} />;
   }
 
-  /* Full Screen Login Screen */
+  /* 2. Login View */
   if (!registeredUser) {
     return (
-      <div className="fixed inset-0 w-screen h-screen flex flex-col lg:flex-row overflow-hidden z-50 bg-black">
-        <div className="hidden lg:flex w-1/2 h-full flex-col justify-between p-12 relative border-r border-white/10 bg-[#07080b]">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-red-500 flex items-center justify-center text-white font-bold">
-              <AiSparkleIcon size={22} />
-            </div>
-            <h2 className="text-xl font-black text-white tracking-tight">SyncPulse <span className="text-red-500">Pro</span></h2>
-          </div>
-
-          <div className="space-y-4 max-w-md">
-            <span className="px-3 py-1 rounded-full text-[11px] font-semibold bg-red-500/10 text-red-400 border border-red-500/30 inline-flex items-center gap-1.5">
-              <Radio size={13} className="animate-pulse" /> Live Supabase & WebRTC Platform
-            </span>
-            <h1 className="text-3xl xl:text-4xl font-extrabold tracking-tight text-white leading-tight">
-              Enterprise WebRTC & Real-time Admin Dashboard
-            </h1>
-            <p className="text-xs text-slate-400 leading-relaxed font-medium">
-              Ultra low-latency P2P video calls, real-time messaging, Supabase Postgres database persistence, mobile phone auth, and Admin Dashboard.
-            </p>
-          </div>
-
-          <div className="text-[11px] text-slate-600 font-medium">
-            © 2026 SyncPulse Pro · Enterprise Supabase Architecture
-          </div>
-        </div>
-
-        <div className="flex-1 h-full flex flex-col items-center justify-center p-6 bg-black overflow-y-auto">
-          <form onSubmit={handleRegister} className="w-full max-w-sm space-y-4 my-auto">
-            <div className="lg:hidden flex flex-col items-center text-center mb-1">
-              <div className="w-12 h-12 rounded-2xl bg-red-500 flex items-center justify-center text-white mb-2 shadow-lg">
-                <AiSparkleIcon size={26} />
-              </div>
-              <h1 className="text-lg font-extrabold text-white">SyncPulse Pro</h1>
-            </div>
-
-            <div className="matte-card p-6 space-y-4">
-              <h2 className="text-base font-bold text-white tracking-tight">Sign In / Register</h2>
-
-              <div>
-                <label className="block text-[10px] font-bold uppercase tracking-wider mb-2 text-slate-400">Choose Profile Avatar</label>
-                <div className="flex justify-between gap-2">
-                  {AVATAR_PRESETS.map((url, i) => (
-                    <img key={i} src={url} alt="" onClick={() => setSelectedAvatar(url)} className="w-9 h-9 rounded-full object-cover cursor-pointer transition-all hover:scale-110" style={{ border: selectedAvatar === url ? '2px solid #ff453a' : '2px solid transparent' }} />
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-bold uppercase tracking-wider mb-1 text-slate-400">Full Name</label>
-                <input type="text" value={userName} onChange={(e) => setUserName(e.target.value)} placeholder="e.g. Sarah Sanders" className="matte-input !py-1.5 text-xs" required autoFocus />
-              </div>
-
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-wider mb-1 text-slate-400">Username</label>
-                  <input type="text" value={userHandle} onChange={(e) => setUserHandle(e.target.value)} placeholder="e.g. sarah_dev" className="matte-input !py-1.5 text-xs" />
-                </div>
-                <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-wider mb-1 text-slate-400">Mobile Phone</label>
-                  <input type="text" value={userPhone} onChange={(e) => setUserPhone(e.target.value)} placeholder="+1 555 123 4567" className="matte-input !py-1.5 text-xs" />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-[10px] font-bold uppercase tracking-wider mb-1 text-slate-400">Account Access Role</label>
-                <select value={userRole} onChange={(e) => setUserRole(e.target.value as any)} className="matte-input !py-1.5 text-xs text-white">
-                  <option value="user" className="bg-slate-900 text-white">Standard User</option>
-                  <option value="admin" className="bg-slate-900 text-white">System Admin (Access Dashboard)</option>
-                </select>
-              </div>
-
-              <button type="submit" className="app-btn app-btn-primary w-full py-2.5 text-xs font-bold shadow-md flex items-center justify-center gap-2">
-                <AiSparkleIcon size={16} /> Enter Platform
-              </button>
-            </div>
-          </form>
-        </div>
-      </div>
+      <LoginView
+        userName={userName} setUserName={setUserName}
+        userHandle={userHandle} setUserHandle={setUserHandle}
+        userPhone={userPhone} setUserPhone={setUserPhone}
+        userRole={userRole} setUserRole={setUserRole}
+        selectedAvatar={selectedAvatar} setSelectedAvatar={setSelectedAvatar}
+        AVATAR_PRESETS={AVATAR_PRESETS}
+        handleRegister={handleRegister}
+      />
     );
   }
 
-  /* Main App Layout */
+  /* 3. Main App Workspace */
   return (
     <div className="fixed inset-0 w-screen h-screen flex flex-col md:flex-row overflow-hidden bg-black">
       <input type="file" ref={fileInputRef} onChange={() => {}} className="hidden" />
@@ -980,48 +880,17 @@ export default function Home() {
         </div>
       ) : (
         <>
-          {/* Desktop Left Sidebar */}
-          <aside className="hidden md:flex w-16 shrink-0 flex-col items-center py-4 gap-3 bg-[#08090c] border-r border-white/10">
-            <div className="w-9 h-9 rounded-xl bg-red-500 flex items-center justify-center text-white mb-2">
-              <AiSparkleIcon size={20} />
-            </div>
+          {/* Navigation Sidebar Component */}
+          <Sidebar
+            screen={screen}
+            setScreen={setScreen}
+            setSelectedContact={setSelectedContact}
+            registeredUser={registeredUser}
+            friendRequestsCount={friendRequests.length}
+            handleLogout={handleLogout}
+          />
 
-            {([
-              { key: 'chats' as Screen, icon: MessageSquare, label: 'Chats' },
-              { key: 'calls' as Screen, icon: PhoneCall, label: 'Calls' },
-              { key: 'friends' as Screen, icon: Users, label: 'Friends', badge: friendRequests.length },
-              { key: 'ai-studio' as Screen, icon: Wand2, label: 'AI' },
-              { key: 'admin' as Screen, icon: ShieldAlert, label: 'Admin', badge: registeredUser?.role === 'admin' ? 1 : undefined },
-              { key: 'profile' as Screen, icon: UserIcon, label: 'Profile' },
-              { key: 'settings' as Screen, icon: Settings, label: 'Settings' },
-            ]).map((nav) => {
-              const active = screen === nav.key;
-              return (
-                <button key={nav.key} onClick={() => { setScreen(nav.key); if (nav.key !== 'chats') setSelectedContact(null); }}
-                  className={`relative w-10 h-10 rounded-xl flex items-center justify-center transition-all ${active ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 'text-slate-400 hover:text-white'}`}
-                  title={nav.label}>
-                  <nav.icon size={18} />
-                  {nav.badge && nav.badge > 0 ? (
-                    <span className="absolute -top-1 -right-1 px-1.5 py-0.2 rounded-full text-[9px] font-extrabold bg-red-500 text-white">
-                      {nav.badge}
-                    </span>
-                  ) : null}
-                </button>
-              );
-            })}
-
-            <div className="flex-1" />
-
-            <div className="relative mb-2 cursor-pointer" onClick={() => setScreen('profile')}>
-              <img src={registeredUser.avatar} alt="" className="w-8 h-8 rounded-full object-cover ring-1 ring-red-500" />
-            </div>
-
-            <button onClick={handleLogout} className="w-8 h-8 rounded-xl flex items-center justify-center text-slate-500 hover:text-red-400">
-              <LogOut size={16} />
-            </button>
-          </aside>
-
-          {/* Sub-Page 1: CHATS */}
+          {/* Sub-View 1: CHATS */}
           {screen === 'chats' && (
             <div className="flex-1 flex h-full overflow-hidden">
               <div className={`${selectedContact ? 'hidden md:flex' : 'flex'} w-full md:w-80 flex-col shrink-0 h-full p-3 bg-[#08090c] border-r border-white/10`}>
@@ -1084,7 +953,7 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* Chat View */}
+              {/* Active Chat Thread */}
               {selectedContact ? (
                 <div className="flex-1 flex flex-col h-full overflow-hidden bg-[#0d0e12]">
                   <div className="flex items-center justify-between px-4 h-14 shrink-0 bg-[#08090c] border-b border-white/10">
@@ -1114,7 +983,7 @@ export default function Home() {
                     </div>
                   </div>
 
-                  {/* Thread */}
+                  {/* Message Stream */}
                   <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
                     {activeChat.map((msg) => {
                       const isMe = msg.sender.id === registeredUser.id;
@@ -1191,230 +1060,85 @@ export default function Home() {
             </div>
           )}
 
-          {/* Sub-Page: ADMIN DASHBOARD */}
-          {screen === 'admin' && (
-            <div className="flex-1 flex flex-col h-full overflow-hidden bg-[#0d0e12]">
-              <div className="px-5 h-14 flex items-center justify-between bg-[#08090c] border-b border-white/10">
-                <h2 className="text-sm font-bold text-white flex items-center gap-2">
-                  <ShieldAlert size={16} className="text-red-500" /> Admin Command Dashboard
-                </h2>
-                <div className="flex gap-1.5 overflow-x-auto">
-                  <button onClick={() => setAdminTab('overview')} className={`px-3 py-1 rounded-lg text-xs font-medium ${adminTab === 'overview' ? 'bg-red-500 text-white' : 'text-slate-400'}`}>Overview</button>
-                  <button onClick={() => setAdminTab('users')} className={`px-3 py-1 rounded-lg text-xs font-medium ${adminTab === 'users' ? 'bg-red-500 text-white' : 'text-slate-400'}`}>Users ({dbUsersList.length})</button>
-                  <button onClick={() => setAdminTab('messages')} className={`px-3 py-1 rounded-lg text-xs font-medium ${adminTab === 'messages' ? 'bg-red-500 text-white' : 'text-slate-400'}`}>Messages ({dbMessagesList.length})</button>
-                  <button onClick={() => setAdminTab('rooms')} className={`px-3 py-1 rounded-lg text-xs font-medium ${adminTab === 'rooms' ? 'bg-red-500 text-white' : 'text-slate-400'}`}>Rooms</button>
-                  <button onClick={() => setAdminTab('system')} className={`px-3 py-1 rounded-lg text-xs font-medium ${adminTab === 'system' ? 'bg-red-500 text-white' : 'text-slate-400'}`}>System</button>
-                </div>
-              </div>
-
-              <div className="flex-1 overflow-y-auto p-5 space-y-5">
-                {adminTab === 'overview' && (
-                  <div className="space-y-4 max-w-4xl mx-auto">
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                      <div className="matte-card p-4 space-y-1">
-                        <span className="text-[10px] font-bold uppercase text-slate-400">Total Users</span>
-                        <h3 className="text-xl font-extrabold text-white">{dbUsersList.length || 2}</h3>
-                      </div>
-                      <div className="matte-card p-4 space-y-1">
-                        <span className="text-[10px] font-bold uppercase text-slate-400">Online Peers</span>
-                        <h3 className="text-xl font-extrabold text-emerald-400">{onlineUsers.length || 1}</h3>
-                      </div>
-                      <div className="matte-card p-4 space-y-1">
-                        <span className="text-[10px] font-bold uppercase text-slate-400">Messages Persisted</span>
-                        <h3 className="text-xl font-extrabold text-purple-400">{dbMessagesList.length}</h3>
-                      </div>
-                      <div className="matte-card p-4 space-y-1">
-                        <span className="text-[10px] font-bold uppercase text-slate-400">System Health</span>
-                        <h3 className="text-xl font-extrabold text-emerald-400">99.99%</h3>
-                      </div>
-                    </div>
-
-                    <div className="matte-card p-5 space-y-3">
-                      <h4 className="text-xs font-bold text-white flex items-center gap-2"><Cpu size={15} className="text-red-400" /> Platform Infrastructure State</h4>
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
-                        <div className="p-3 rounded-xl bg-slate-900 border border-white/5 space-y-1">
-                          <span className="text-slate-400 block text-[10px]">Database Engine</span>
-                          <span className="font-bold text-white">Supabase Postgres</span>
-                        </div>
-                        <div className="p-3 rounded-xl bg-slate-900 border border-white/5 space-y-1">
-                          <span className="text-slate-400 block text-[10px]">Signaling Cluster</span>
-                          <span className="font-bold text-emerald-400">Socket.io + HTTP Dual</span>
-                        </div>
-                        <div className="p-3 rounded-xl bg-slate-900 border border-white/5 space-y-1">
-                          <span className="text-slate-400 block text-[10px]">AI Assistant</span>
-                          <span className="font-bold text-purple-400">Gemini 1.5 Flash</span>
-                        </div>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {adminTab === 'users' && (
-                  <div className="max-w-4xl mx-auto space-y-3">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-xs font-bold text-white">Registered Credentials & Accounts</h3>
-                      <button onClick={() => fetchAllUsersFromDb().then(setDbUsersList)} className="p-1.5 rounded-lg bg-white/5 text-slate-300 text-xs flex items-center gap-1"><RefreshCw size={12} /> Refresh</button>
-                    </div>
-
-                    <div className="space-y-2">
-                      {dbUsersList.map((u) => (
-                        <div key={u.id} className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-3.5 matte-card gap-2">
-                          <div className="flex items-center gap-3">
-                            <img src={u.avatar_url || AVATAR_PRESETS[0]} alt="" className="w-9 h-9 rounded-full object-cover ring-1 ring-white/10" />
-                            <div>
-                              <div className="flex items-center gap-2">
-                                <h4 className="text-xs font-bold text-white">{u.full_name}</h4>
-                                <span className={`px-2 py-0.2 rounded-full text-[9px] font-extrabold ${u.role === 'admin' ? 'bg-red-500 text-white' : 'bg-slate-800 text-slate-300'}`}>{u.role}</span>
-                                {u.is_suspended && <span className="px-2 py-0.2 rounded-full text-[9px] font-extrabold bg-amber-500 text-black">Suspended</span>}
-                              </div>
-                              <span className="text-[10px] text-slate-400 block">@{u.username || 'user'} · Phone: {u.phone_number || 'N/A'}</span>
-                            </div>
-                          </div>
-
-                          <div className="flex gap-1.5 flex-wrap">
-                            <button onClick={() => handleAdminToggleUserRole(u.id, u.role)} className="px-2.5 py-1 rounded-lg text-xs bg-white/5 text-white hover:bg-white/10">
-                              {u.role === 'admin' ? 'Demote' : 'Make Admin'}
-                            </button>
-                            <button onClick={() => handleAdminToggleUserSuspension(u.id, !!u.is_suspended)} className={`px-2.5 py-1 rounded-lg text-xs font-semibold ${u.is_suspended ? 'bg-emerald-500/20 text-emerald-400' : 'bg-amber-500/20 text-amber-400'}`}>
-                              {u.is_suspended ? 'Unsuspend' : 'Suspend'}
-                            </button>
-                            <button onClick={() => handleAdminDeleteUser(u.id)} className="px-2 py-1 rounded-lg text-xs bg-red-500/20 text-red-400"><Trash2 size={12} /></button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {adminTab === 'messages' && (
-                  <div className="max-w-4xl mx-auto space-y-3">
-                    <div className="flex items-center justify-between">
-                      <h3 className="text-xs font-bold text-white">Live Messages & Moderation Log</h3>
-                      <button onClick={() => fetchAllMessagesFromDb().then(setDbMessagesList)} className="p-1.5 rounded-lg bg-white/5 text-slate-300 text-xs flex items-center gap-1"><RefreshCw size={12} /> Refresh</button>
-                    </div>
-
-                    <div className="space-y-2">
-                      {dbMessagesList.map((m) => (
-                        <div key={m.id} className="flex items-center justify-between p-3 matte-card text-xs">
-                          <div>
-                            <span className="text-red-400 font-bold">Room: {m.room_id.slice(0, 16)}</span>
-                            <p className="text-white mt-0.5">{m.text}</p>
-                            <span className="text-[10px] text-slate-500">{new Date(m.created_at).toLocaleString()}</span>
-                          </div>
-                          <button onClick={() => handleAdminDeleteMessage(m.id)} className="p-2 rounded-lg bg-red-500/20 text-red-400"><Trash2 size={13} /></button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {adminTab === 'rooms' && (
-                  <div className="max-w-4xl mx-auto matte-card p-6 text-center space-y-2">
-                    <Video size={28} className="mx-auto text-red-400" />
-                    <h3 className="text-xs font-bold text-white">Active WebRTC Studio Rooms</h3>
-                    <p className="text-[11px] text-slate-400">{activeRoomId ? `1 Active Room: ${activeRoomId}` : 'No active call rooms.'}</p>
-                  </div>
-                )}
-
-                {adminTab === 'system' && (
-                  <div className="max-w-4xl mx-auto matte-card p-5 space-y-3">
-                    <h3 className="text-xs font-bold text-white flex items-center gap-2"><Server size={15} className="text-red-400" /> System Configuration & TURN Server</h3>
-                    <pre className="p-3 rounded-xl bg-black text-[11px] text-emerald-400 font-mono overflow-x-auto">
-{`{
-  "stun_servers": ["stun:stun.l.google.com:19302"],
-  "turn_servers": ["turn:global.turn.syncpulse.pro:3478"],
-  "sfu_mode": "mediasoup-v3",
-  "max_mesh_peers": 4,
-  "supabase_rls": "enabled"
-}`}
-                    </pre>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
-          {/* Other sub-pages... */}
+          {/* Sub-View 2: CALLING STUDIO */}
           {screen === 'calls' && (
             <div className="flex-1 flex flex-col h-full bg-[#0d0e12] p-5">
-              <h2 className="text-sm font-bold text-white mb-3">Calling Studio</h2>
-              <div className="matte-card p-4 space-y-3">
+              <h2 className="text-sm font-bold text-white mb-3 flex items-center gap-2"><PhoneCall size={16} className="text-red-400" /> Calling Studio</h2>
+              <div className="matte-card p-4 space-y-3 max-w-md">
                 <input type="text" value={groupRoomInput} onChange={(e) => setGroupRoomInput(e.target.value)} placeholder="Room Name..." className="matte-input text-xs" />
                 <button onClick={() => joinGroup(true)} className="app-btn app-btn-primary px-4 py-2 text-xs">Join Room</button>
               </div>
             </div>
           )}
 
+          {/* Sub-View 3: FRIENDS NETWORK */}
           {screen === 'friends' && (
-            <div className="flex-1 flex flex-col h-full bg-[#0d0e12] p-5 space-y-3">
-              <h2 className="text-sm font-bold text-white">Friends Network</h2>
-              {others.map((u) => (
-                <div key={u.id} className="flex items-center justify-between p-3 matte-card">
-                  <span className="text-xs font-bold text-white">{u.name}</span>
-                  <button onClick={() => sendFriendRequest(u)} className="app-btn app-btn-primary px-3 py-1 text-xs">Add Friend</button>
-                </div>
-              ))}
-            </div>
+            <FriendsView
+              friendsTab={friendsTab} setFriendsTab={setFriendsTab}
+              others={others} friendUserObjects={friendUserObjects}
+              friendRequests={friendRequests} sentRequests={sentRequests}
+              isFriend={isFriend} sendFriendRequest={sendFriendRequest}
+              acceptFriendRequest={acceptFriendRequest} rejectFriendRequest={rejectFriendRequest}
+              setSelectedContact={setSelectedContact} setScreen={setScreen}
+              startCall={startCall}
+            />
           )}
 
+          {/* Sub-View 4: AI STUDIO */}
           {screen === 'ai-studio' && (
-            <div className="flex-1 flex flex-col h-full bg-[#0d0e12] p-5 space-y-4">
-              <h2 className="text-sm font-bold text-white flex items-center gap-2"><AiSparkleIcon size={16} /> AI Studio</h2>
-              <div className="matte-card p-4 space-y-3">
-                <textarea rows={3} value={aiPolishInput} onChange={(e) => setAiPolishInput(e.target.value)} placeholder="Draft text..." className="matte-input text-xs resize-none" />
-                <button onClick={async () => setAiPolishOutput(await rephraseWithContext(aiPolishInput))} className="app-btn app-btn-primary px-4 py-2 text-xs">Rephrase</button>
-                {aiPolishOutput && <div className="p-3 rounded-xl bg-red-500/10 text-xs text-white">{aiPolishOutput}</div>}
-              </div>
-            </div>
+            <AiStudioView
+              aiPolishInput={aiPolishInput} setAiPolishInput={setAiPolishInput}
+              aiPolishOutput={aiPolishOutput} setAiPolishOutput={setAiPolishOutput}
+              isAiThinking={isAiThinking} setIsAiThinking={setIsAiThinking}
+              rephraseWithContext={rephraseWithContext}
+            />
           )}
 
+          {/* Sub-View 5: ADMIN DASHBOARD */}
+          {screen === 'admin' && (
+            <AdminDashboardView
+              adminTab={adminTab} setAdminTab={setAdminTab}
+              dbUsersList={dbUsersList} setDbUsersList={setDbUsersList}
+              dbMessagesList={dbMessagesList} setDbMessagesList={setDbMessagesList}
+              onlineUsers={onlineUsers} activeRoomId={activeRoomId}
+              fetchAllUsersFromDb={fetchAllUsersFromDb}
+              fetchAllMessagesFromDb={fetchAllMessagesFromDb}
+              handleAdminToggleUserRole={handleAdminToggleUserRole}
+              handleAdminToggleUserSuspension={handleAdminToggleUserSuspension}
+              handleAdminDeleteUser={handleAdminDeleteUser}
+              handleAdminDeleteMessage={handleAdminDeleteMessage}
+              AVATAR_PRESETS={AVATAR_PRESETS}
+            />
+          )}
+
+          {/* Sub-View 6: PROFILE */}
           {screen === 'profile' && (
             <div className="flex-1 flex flex-col h-full bg-[#0d0e12] p-5">
-              <div className="matte-card p-6 max-w-md mx-auto w-full space-y-3">
+              <div className="matte-card p-6 max-w-md mx-auto w-full space-y-4">
                 <div className="flex items-center gap-4">
                   <img src={registeredUser.avatar} alt="" className="w-16 h-16 rounded-full object-cover ring-2 ring-red-500" />
                   <div>
                     <h3 className="text-base font-bold text-white">{registeredUser.name}</h3>
                     <p className="text-xs text-slate-400">@{registeredUser.username || 'user'}</p>
-                    <p className="text-xs text-slate-400">{registeredUser.bio}</p>
+                    <p className="text-xs text-slate-400 mt-1">{registeredUser.bio}</p>
                   </div>
                 </div>
-                <button onClick={handleLogout} className="w-full py-2 rounded-xl text-xs bg-red-500/20 text-red-400">Logout</button>
+                <button onClick={handleLogout} className="w-full py-2 rounded-xl text-xs bg-red-500/20 text-red-400 font-bold">Logout</button>
               </div>
             </div>
           )}
 
+          {/* Sub-View 7: SETTINGS */}
           {screen === 'settings' && (
             <div className="flex-1 flex flex-col h-full bg-[#0d0e12] p-5 space-y-3">
               <h2 className="text-sm font-bold text-white">Settings</h2>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                 {THEMES.map((t) => (
                   <button key={t.key} onClick={() => setTheme(t.key)} className="p-3 rounded-xl matte-card text-xs text-white text-left font-semibold">{t.label}</button>
                 ))}
               </div>
             </div>
           )}
-
-          {/* Mobile Bottom Bar */}
-          <nav className="md:hidden flex items-center justify-around h-14 shrink-0 z-40 bg-black/95 backdrop-blur-2xl border-t border-white/10 px-2">
-            {([
-              { key: 'chats' as Screen, icon: MessageSquare, label: 'Chats' },
-              { key: 'calls' as Screen, icon: PhoneCall, label: 'Calls' },
-              { key: 'friends' as Screen, icon: Users, label: 'Friends' },
-              { key: 'admin' as Screen, icon: ShieldAlert, label: 'Admin' },
-              { key: 'profile' as Screen, icon: UserIcon, label: 'Profile' },
-              { key: 'settings' as Screen, icon: Settings, label: 'Settings' },
-            ]).map((nav) => {
-              const active = screen === nav.key;
-              return (
-                <button key={nav.key} onClick={() => { setScreen(nav.key); if (nav.key !== 'chats') setSelectedContact(null); }}
-                  className={`relative flex flex-col items-center justify-center gap-0.5 px-3 py-1 rounded-xl transition-all ${active ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 'text-slate-400'}`}>
-                  <nav.icon size={16} />
-                  <span className="text-[9px] font-bold">{nav.label}</span>
-                </button>
-              );
-            })}
-          </nav>
         </>
       )}
     </div>

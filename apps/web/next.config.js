@@ -5,7 +5,7 @@ const nextConfig = {
   reactStrictMode: true,
   // On Vercel, output .next at repo root so @vercel/next finds it
   // (the monorepo root is the Vercel project root, not apps/web/)
-  distDir: process.env.VERCEL ? '../../.next' : '.next',
+  distDir: process.env.VERCEL ? '../.next' : '.next',
   transpilePackages: ['@webrtc/ui', '@webrtc/sdk', '@webrtc/types'],
   webpack: (config) => {
     config.resolve.alias = {

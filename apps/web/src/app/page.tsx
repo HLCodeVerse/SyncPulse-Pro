@@ -272,37 +272,47 @@ export default function Home() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chatMessages, selectedContact, smartReplyChips]);
 
-  /* Hydrate Thread History from Supabase DB on Contact Select */
+  /* Real-Time Thread History Synchronization */
   useEffect(() => {
     if (!selectedContact || !registeredUser) return;
 
     const roomId = selectedContact.id === AI_BOT_USER.id ? 'pulse_ai_bot' : [registeredUser.id, selectedContact.id].sort().join('_chat_');
 
-    fetchRoomMessagesFromDb(roomId).then((dbMsgs) => {
-      if (dbMsgs && dbMsgs.length > 0) {
-        const formattedMsgs: ChatMessage[] = dbMsgs.map(m => ({
-          id: m.id,
-          roomId: m.room_id,
-          sender: m.sender_id === registeredUser.id
-            ? { id: registeredUser.id, name: registeredUser.name, avatar: registeredUser.avatar }
-            : { id: selectedContact.id, name: selectedContact.name, avatar: selectedContact.avatar },
-          text: m.text,
-          timestamp: new Date(m.created_at).getTime(),
-          status: 'read',
-          isEdited: m.is_edited,
-          isDeleted: m.is_deleted
-        }));
+    const syncMessages = () => {
+      fetchRoomMessagesFromDb(roomId).then((dbMsgs) => {
+        if (dbMsgs && dbMsgs.length > 0) {
+          const formattedMsgs: ChatMessage[] = dbMsgs.map(m => ({
+            id: m.id,
+            roomId: m.room_id,
+            sender: m.sender_id === registeredUser.id
+              ? { id: registeredUser.id, name: registeredUser.name, avatar: registeredUser.avatar }
+              : { id: selectedContact.id, name: selectedContact.name, avatar: selectedContact.avatar },
+            text: m.text,
+            timestamp: new Date(m.created_at).getTime(),
+            status: 'read',
+            isEdited: m.is_edited,
+            isDeleted: m.is_deleted
+          }));
 
-        setChatMessages(prev => {
-          const existingIds = new Set(prev.map(x => x.id));
-          const combined = [...prev];
-          formattedMsgs.forEach(m => {
-            if (!existingIds.has(m.id)) combined.push(m);
+          setChatMessages(prev => {
+            const existingIds = new Set(prev.map(x => x.id));
+            let hasNew = false;
+            const combined = [...prev];
+            formattedMsgs.forEach(m => {
+              if (!existingIds.has(m.id)) {
+                combined.push(m);
+                hasNew = true;
+              }
+            });
+            return hasNew ? combined.sort((a, b) => a.timestamp - b.timestamp) : prev;
           });
-          return combined.sort((a, b) => a.timestamp - b.timestamp);
-        });
-      }
-    });
+        }
+      });
+    };
+
+    syncMessages();
+    const interval = setInterval(syncMessages, 1500);
+    return () => clearInterval(interval);
   }, [selectedContact, registeredUser]);
 
   /* Signaling Listeners */
@@ -893,6 +903,47 @@ export default function Home() {
             onToggleChat={() => setIsChatOpen((v) => !v)}
             onEndCall={leaveCall}
           />
+
+          {showInviteModal && (
+            <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+              <div className="matte-card max-w-sm w-full p-5 space-y-4 border border-white/10">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                    <UserPlus size={16} className="text-red-400" /> Invite Friends to Call
+                  </h3>
+                  <button onClick={() => setShowInviteModal(false)} className="text-slate-400 hover:text-white">
+                    <X size={16} />
+                  </button>
+                </div>
+
+                <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                  {acceptedFriendObjects.length === 0 ? (
+                    <p className="text-xs text-slate-400 text-center py-4">No accepted friends available to invite.</p>
+                  ) : (
+                    acceptedFriendObjects.map((f) => (
+                      <div key={f.id} className="flex items-center justify-between p-2.5 rounded-xl bg-white/5 border border-white/5">
+                        <div className="flex items-center gap-2.5">
+                          <img src={f.avatar} alt="" className="w-8 h-8 rounded-full object-cover" />
+                          <div>
+                            <p className="text-xs font-bold text-white">{f.name}</p>
+                            <p className={`text-[10px] ${f.status === 'online' ? 'text-emerald-400' : 'text-slate-500'}`}>
+                              {f.status === 'online' ? '● Online' : 'Offline'}
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => { inviteUserToCall(f); setShowInviteModal(false); }}
+                          className="app-btn app-btn-primary px-3 py-1 text-xs font-bold"
+                        >
+                          Invite
+                        </button>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       ) : (
         <>

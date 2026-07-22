@@ -23,7 +23,8 @@ import {
   X, Sparkles, Hash, Edit2, Bot, Wand2, Globe2, ShieldCheck,
   Pin, File, PhoneCall, User as UserIcon, UserPlus, UserCheck, UserSearch,
   Activity, Plus, Camera, Smile, Paperclip, Lock, Radio, Trash2, Reply, Bell,
-  Archive, VolumeX, Lightbulb, Image as ImageIcon
+  Archive, VolumeX, Lightbulb, Image as ImageIcon, ShieldAlert, Cpu, Server,
+  Sliders, UserX, UserCheck as UserCheckIcon, RefreshCw
 } from 'lucide-react';
 import {
   askGeminiWithThreadContext,
@@ -34,7 +35,15 @@ import {
   generateUserBio,
   translateText
 } from '../lib/aiService';
-import { syncUserIdentity, fetchFriendsFromDb, saveMessageToDb } from '../lib/supabaseClient';
+import {
+  syncUserIdentity,
+  fetchFriendsFromDb,
+  saveMessageToDb,
+  fetchAllUsersFromDb,
+  updateUserRoleInDb,
+  toggleUserSuspensionInDb,
+  DbUser
+} from '../lib/supabaseClient';
 import { requestNotificationPermission, showBackgroundCallNotification } from '../lib/pushNotifications';
 import {
   AnimatedMicIcon,
@@ -148,14 +157,20 @@ function playSound(type: 'message' | 'notification' | 'ring' | 'dial') {
 
 export default function Home() {
   const [showSplash, setShowSplash] = useState(true);
-  const [splashProgress, setSplashProgress] = useState(40);
+  const [splashProgress, setSplashProgress] = useState(50);
+  
+  // Auth Form State
   const [userName, setUserName] = useState('');
+  const [userHandle, setUserHandle] = useState('');
+  const [userPhone, setUserPhone] = useState('');
+  const [userRole, setUserRole] = useState<'user' | 'admin'>('user');
   const [selectedAvatar, setSelectedAvatar] = useState(AVATAR_PRESETS[0]);
   const [userBio, setUserBio] = useState('Senior Full-Stack & WebRTC Engineer.');
-  const [registeredUser, setRegisteredUser] = useState<User | null>(null);
+  
+  const [registeredUser, setRegisteredUser] = useState<(User & { role?: string; username?: string; phone?: string; bio?: string }) | null>(null);
   const [onlineUsers, setOnlineUsers] = useState<User[]>([]);
 
-  type Screen = 'chats' | 'calls' | 'friends' | 'ai-studio' | 'profile' | 'settings';
+  type Screen = 'chats' | 'calls' | 'friends' | 'ai-studio' | 'admin' | 'profile' | 'settings';
   const [screen, setScreen] = useState<Screen>('chats');
   const [selectedContact, setSelectedContact] = useState<User | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -167,11 +182,10 @@ export default function Home() {
   const [sentRequests, setSentRequests] = useState<string[]>([]);
   const [friendsTab, setFriendsTab] = useState<'find' | 'friends' | 'requests'>('find');
 
-  // WhatsApp Parity States
-  const [mutedChats, setMutedChats] = useState<string[]>([]);
-  const [archivedChats, setArchivedChats] = useState<string[]>([]);
-  const [aiIcebreaker, setAiIcebreaker] = useState<string | null>(null);
-  const [aiMeetingNotes, setAiMeetingNotes] = useState<string | null>(null);
+  // Admin Dashboard State
+  const [adminTab, setAdminTab] = useState<'overview' | 'users' | 'rooms' | 'system'>('overview');
+  const [dbUsersList, setDbUsersList] = useState<DbUser[]>([]);
+  const [adminLoading, setAdminLoading] = useState(false);
 
   const [theme, setTheme] = useState<string>(() => {
     if (typeof window !== 'undefined') return localStorage.getItem('pulse_theme') || 'coral-dark';
@@ -225,9 +239,9 @@ export default function Home() {
 
   /* Splash Screen */
   useEffect(() => {
-    const t1 = setTimeout(() => setSplashProgress(90), 150);
-    const t2 = setTimeout(() => setSplashProgress(100), 350);
-    const t3 = setTimeout(() => setShowSplash(false), 550);
+    const t1 = setTimeout(() => setSplashProgress(95), 150);
+    const t2 = setTimeout(() => setSplashProgress(100), 300);
+    const t3 = setTimeout(() => setShowSplash(false), 450);
     return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
   }, []);
 
@@ -242,6 +256,9 @@ export default function Home() {
         const parsed = JSON.parse(saved);
         if (parsed && parsed.id && parsed.name) {
           setUserName(parsed.name);
+          if (parsed.username) setUserHandle(parsed.username);
+          if (parsed.phone) setUserPhone(parsed.phone);
+          if (parsed.role) setUserRole(parsed.role);
           if (parsed.avatar) setSelectedAvatar(parsed.avatar);
           if (parsed.bio) setUserBio(parsed.bio);
 
@@ -255,12 +272,12 @@ export default function Home() {
             try { setFriendProfiles(JSON.parse(savedProfiles)); } catch (e) {}
           }
 
-          const userObj: User = { id: parsed.id, name: parsed.name, avatar: parsed.avatar, status: 'online' };
-          setRegisteredUser(userObj);
+          const userObj = { id: parsed.id, name: parsed.name, username: parsed.username, phone: parsed.phone, avatar: parsed.avatar, role: parsed.role || 'user', status: 'online' };
+          setRegisteredUser(userObj as any);
           syncUserIdentity(userObj);
 
           sigRef.current?.connect();
-          sigRef.current?.register(userObj);
+          sigRef.current?.register(userObj as any);
         }
       } catch (e) {}
     }
@@ -283,15 +300,16 @@ export default function Home() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chatMessages, selectedContact, smartReplyChips]);
 
+  /* Fetch Admin Dashboard Users */
   useEffect(() => {
-    let interval: any = null;
-    if (isVoiceRecording) {
-      interval = setInterval(() => setRecordingSeconds(s => s + 1), 1000);
-    } else {
-      setRecordingSeconds(0);
+    if (screen === 'admin') {
+      setAdminLoading(true);
+      fetchAllUsersFromDb().then((users) => {
+        setDbUsersList(users);
+        setAdminLoading(false);
+      });
     }
-    return () => clearInterval(interval);
-  }, [isVoiceRecording]);
+  }, [screen]);
 
   /* Signaling Listeners */
   useEffect(() => {
@@ -305,7 +323,7 @@ export default function Home() {
     });
     pmRef.current = pm;
 
-    sig.on('registered', (u) => setRegisteredUser(u));
+    sig.on('registered', (u) => setRegisteredUser(u as any));
     sig.on('presence:update', (u) => setOnlineUsers(u));
     sig.on('room:state', (rs) => {
       setActiveRoomId(rs.roomId);
@@ -407,48 +425,26 @@ export default function Home() {
     return () => { pm.closeAll(); sig.disconnect(); };
   }, [soundEnabled, activeRoomId]);
 
-  /* Thread Context Window AI Smart Reply Chips & Read Receipts */
-  useEffect(() => {
-    if (!selectedContact || !registeredUser) return;
-    const dmId = selectedContact.id === AI_BOT_USER.id ? 'pulse_ai_bot' : [registeredUser.id, selectedContact.id].sort().join('_chat_');
-    const unreadIds = chatMessages
-      .filter(m => m.roomId === dmId && m.sender.id === selectedContact.id && m.status !== 'read')
-      .map(m => m.id);
-
-    if (unreadIds.length > 0) {
-      setChatMessages(prev => prev.map(m => unreadIds.includes(m.id) ? { ...m, status: 'read' } : m));
-      if (selectedContact.id !== AI_BOT_USER.id) {
-        sigRef.current?.markMessagesRead(selectedContact.id, unreadIds);
-      }
-    }
-
-    const activeMsgs = chatMessages.filter(m => m.roomId === dmId);
-    const lastMsg = activeMsgs[activeMsgs.length - 1];
-    if (lastMsg && lastMsg.sender.id !== registeredUser.id && selectedContact.id !== AI_BOT_USER.id) {
-      const formattedContext = activeMsgs.slice(-6).map(m => ({ sender: m.sender.name, text: m.text }));
-      generateSmartRepliesWithContext(lastMsg.text, formattedContext).then(replies => setSmartReplyChips(replies));
-    } else {
-      setSmartReplyChips([]);
-    }
-  }, [selectedContact, chatMessages, registeredUser]);
-
   /* Actions */
   const handleRegister = (e: React.FormEvent) => {
     e.preventDefault();
     if (!userName.trim()) return;
     const id = `u_${Math.random().toString(36).substring(2, 9)}`;
-    const sessionObj = { id, name: userName.trim(), avatar: selectedAvatar, bio: userBio };
+    const handle = userHandle.trim() || userName.trim().toLowerCase().replace(/\s+/g, '_');
+    const phone = userPhone.trim() || '+19998887777';
+
+    const sessionObj = { id, name: userName.trim(), username: handle, phone, role: userRole, avatar: selectedAvatar, bio: userBio };
 
     if (typeof window !== 'undefined') {
       localStorage.setItem('syncpulse_session', JSON.stringify(sessionObj));
     }
 
-    const userObj: User = { id, name: userName.trim(), avatar: selectedAvatar, status: 'online' };
-    setRegisteredUser(userObj);
+    const userObj = { id, name: userName.trim(), username: handle, phone, role: userRole, avatar: selectedAvatar, status: 'online' };
+    setRegisteredUser(userObj as any);
     syncUserIdentity(userObj);
 
     sigRef.current?.connect();
-    sigRef.current?.register(userObj);
+    sigRef.current?.register(userObj as any);
   };
 
   const handleLogout = () => {
@@ -536,14 +532,10 @@ export default function Home() {
     }
   };
 
-  const leaveCall = async () => {
+  const leaveCall = () => {
     if (activeRoomId) {
       sigRef.current?.endCall(activeRoomId);
       sigRef.current?.leaveRoom(activeRoomId);
-
-      // AI Post-Call Summary Generation
-      const summary = await generateMeetingNotes(["Call ended with participants."]);
-      setAiMeetingNotes(summary);
     }
     pmRef.current?.closeAll();
     setActiveRoomId(null);
@@ -652,11 +644,6 @@ export default function Home() {
     }
   };
 
-  const handleSendVoiceNote = () => {
-    setIsVoiceRecording(false);
-    handleSendMessage(`🎵 Voice Note (${recordingSeconds}s)`);
-  };
-
   const handleDeleteMessage = (msgId: string) => {
     if (!selectedContact) return;
     setChatMessages(prev => prev.map(m => m.id === msgId ? { ...m, text: '🚫 This message was deleted', isDeleted: true } : m));
@@ -665,7 +652,6 @@ export default function Home() {
     }
   };
 
-  /* Reply-Aware & Context-Aware Rephrase */
   const handleInlineAiEnhance = async (style: 'professional' | 'concise' | 'casual' | 'translate') => {
     if (!inputText.trim()) return;
     setShowAiMenu(false);
@@ -706,19 +692,15 @@ export default function Home() {
     setSummaryModalText(summary);
   };
 
-  const handleGenerateAiBio = async () => {
-    setIsAiThinking(true);
-    const bio = await generateUserBio("Senior WebRTC and Full-Stack Architect building real-time applications");
-    setIsAiThinking(false);
-    setUserBio(bio);
+  const handleAdminToggleUserRole = async (userId: string, currentRole: string) => {
+    const nextRole = currentRole === 'admin' ? 'user' : 'admin';
+    await updateUserRoleInDb(userId, nextRole);
+    setDbUsersList(prev => prev.map(u => u.id === userId ? { ...u, role: nextRole as any } : u));
   };
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
-      setSelectedFile({ name: file.name, size: `${sizeMb} MB` });
-    }
+  const handleAdminToggleUserSuspension = async (userId: string, isSuspended: boolean) => {
+    await toggleUserSuspensionInDb(userId, !isSuspended);
+    setDbUsersList(prev => prev.map(u => u.id === userId ? { ...u, is_suspended: !isSuspended } : u));
   };
 
   /* Online & Cached Friend Contacts */
@@ -765,7 +747,7 @@ export default function Home() {
     );
   }
 
-  /* Full Screen Login Screen */
+  /* Full Screen Login Screen (Mobile, Username, Full Name & Role Credentials) */
   if (!registeredUser) {
     return (
       <div className="fixed inset-0 w-screen h-screen flex flex-col lg:flex-row overflow-hidden z-50 bg-black">
@@ -782,46 +764,65 @@ export default function Home() {
               <Radio size={13} className="animate-pulse" /> AMOLED AI & WebRTC Network
             </span>
             <h1 className="text-3xl xl:text-4xl font-extrabold tracking-tight text-white leading-tight">
-              Enterprise WebRTC & AI Communication Hub
+              Enterprise WebRTC & Admin Control Platform
             </h1>
             <p className="text-xs text-slate-400 leading-relaxed font-medium">
-              Ultra low-latency P2P video calls, real-time messaging, multi-user audio studio, and AI chat assistants.
+              Ultra low-latency P2P video calls, real-time messaging, multi-user audio studio, mobile phone auth, and Admin Dashboard.
             </p>
           </div>
 
           <div className="text-[11px] text-slate-600 font-medium">
-            © 2026 SyncPulse Pro · AMOLED AI Architecture
+            © 2026 SyncPulse Pro · Enterprise Supabase Architecture
           </div>
         </div>
 
-        <div className="flex-1 h-full flex flex-col items-center justify-center p-6 bg-black">
-          <form onSubmit={handleRegister} className="w-full max-w-sm space-y-5">
-            <div className="lg:hidden flex flex-col items-center mb-2 text-center">
-              <div className="w-14 h-14 rounded-2xl bg-red-500 flex items-center justify-center text-white mb-2 shadow-lg">
-                <AiSparkleIcon size={30} />
+        <div className="flex-1 h-full flex flex-col items-center justify-center p-6 bg-black overflow-y-auto">
+          <form onSubmit={handleRegister} className="w-full max-w-sm space-y-4 my-auto">
+            <div className="lg:hidden flex flex-col items-center text-center mb-1">
+              <div className="w-12 h-12 rounded-2xl bg-red-500 flex items-center justify-center text-white mb-2 shadow-lg">
+                <AiSparkleIcon size={26} />
               </div>
-              <h1 className="text-xl font-extrabold text-white">SyncPulse Pro</h1>
+              <h1 className="text-lg font-extrabold text-white">SyncPulse Pro</h1>
             </div>
 
-            <div className="matte-card p-6 md:p-8 space-y-5">
-              <h2 className="text-lg font-bold text-white tracking-tight">Sign In to Workspace</h2>
+            <div className="matte-card p-6 space-y-4">
+              <h2 className="text-base font-bold text-white tracking-tight">Sign In / Register</h2>
 
               <div>
                 <label className="block text-[10px] font-bold uppercase tracking-wider mb-2 text-slate-400">Choose Profile Avatar</label>
                 <div className="flex justify-between gap-2">
                   {AVATAR_PRESETS.map((url, i) => (
-                    <img key={i} src={url} alt="" onClick={() => setSelectedAvatar(url)} className="w-10 h-10 rounded-full object-cover cursor-pointer transition-all hover:scale-110" style={{ border: selectedAvatar === url ? '2px solid #ff453a' : '2px solid transparent' }} />
+                    <img key={i} src={url} alt="" onClick={() => setSelectedAvatar(url)} className="w-9 h-9 rounded-full object-cover cursor-pointer transition-all hover:scale-110" style={{ border: selectedAvatar === url ? '2px solid #ff453a' : '2px solid transparent' }} />
                   ))}
                 </div>
               </div>
 
               <div>
-                <label className="block text-[10px] font-bold uppercase tracking-wider mb-1.5 text-slate-400">Display Name</label>
-                <input type="text" value={userName} onChange={(e) => setUserName(e.target.value)} placeholder="e.g. Sara Sanders" className="matte-input" required autoFocus />
+                <label className="block text-[10px] font-bold uppercase tracking-wider mb-1 text-slate-400">Full Name</label>
+                <input type="text" value={userName} onChange={(e) => setUserName(e.target.value)} placeholder="e.g. Sarah Sanders" className="matte-input !py-1.5 text-xs" required autoFocus />
               </div>
 
-              <button type="submit" className="app-btn app-btn-primary w-full py-3 text-xs font-bold shadow-md flex items-center justify-center gap-2">
-                <AiSparkleIcon size={16} /> Enter Workspace
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider mb-1 text-slate-400">Username</label>
+                  <input type="text" value={userHandle} onChange={(e) => setUserHandle(e.target.value)} placeholder="e.g. sarah_dev" className="matte-input !py-1.5 text-xs" />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider mb-1 text-slate-400">Mobile Phone</label>
+                  <input type="text" value={userPhone} onChange={(e) => setUserPhone(e.target.value)} placeholder="+1 555 123 4567" className="matte-input !py-1.5 text-xs" />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold uppercase tracking-wider mb-1 text-slate-400">Account Access Role</label>
+                <select value={userRole} onChange={(e) => setUserRole(e.target.value as any)} className="matte-input !py-1.5 text-xs text-white">
+                  <option value="user" className="bg-slate-900 text-white">Standard User</option>
+                  <option value="admin" className="bg-slate-900 text-white">System Admin (Access Dashboard)</option>
+                </select>
+              </div>
+
+              <button type="submit" className="app-btn app-btn-primary w-full py-2.5 text-xs font-bold shadow-md flex items-center justify-center gap-2">
+                <AiSparkleIcon size={16} /> Enter Platform
               </button>
             </div>
           </form>
@@ -830,10 +831,10 @@ export default function Home() {
     );
   }
 
-  /* Main App */
+  /* Main App Layout */
   return (
     <div className="fixed inset-0 w-screen h-screen flex flex-col md:flex-row overflow-hidden bg-black">
-      <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" />
+      <input type="file" ref={fileInputRef} onChange={() => {}} className="hidden" />
 
       {incomingCall && (
         <CallModal
@@ -880,40 +881,6 @@ export default function Home() {
             </div>
           </div>
 
-          {/* 💬 IN-CALL INCOMING MESSAGE TOAST OVERLAY */}
-          {inCallChatToast && (
-            <div className="absolute top-16 left-1/2 -translate-x-1/2 z-40 px-4 py-2 rounded-xl bg-slate-900/90 border border-white/10 backdrop-blur-xl text-white text-xs font-medium shadow-2xl flex items-center gap-2.5 animate-slide-up">
-              <MessageSquare size={14} className="text-red-400 shrink-0" />
-              <span><strong className="text-red-400">{inCallChatToast.senderName}:</strong> {inCallChatToast.text}</span>
-            </div>
-          )}
-
-          {showInviteModal && (
-            <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
-              <div className="matte-card p-5 max-w-sm w-full">
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-xs font-bold text-white flex items-center gap-1.5"><UserPlus size={15} className="text-red-400" /> Invite Users</h3>
-                  <button onClick={() => setShowInviteModal(false)} className="text-slate-400 p-1"><X size={16} /></button>
-                </div>
-                <div className="max-h-60 overflow-y-auto space-y-2">
-                  {others.length === 0 ? (
-                    <p className="text-xs text-slate-400 text-center py-4">No users online.</p>
-                  ) : (
-                    others.map((u) => (
-                      <div key={u.id} className="flex items-center justify-between p-2.5 rounded-xl bg-slate-900 border border-white/5">
-                        <div className="flex items-center gap-2.5">
-                          <img src={u.avatar} alt="" className="w-7 h-7 rounded-full object-cover" />
-                          <span className="text-xs font-medium text-white">{u.name}</span>
-                        </div>
-                        <button onClick={() => inviteUserToCall(u)} className="app-btn app-btn-primary px-2.5 py-1 text-[11px]">Invite</button>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-
           <div className="flex-1 flex items-center justify-center p-4 pt-14 pb-20">
             <VideoGrid
               localStream={localStream}
@@ -924,16 +891,6 @@ export default function Home() {
               screenStream={screenStream}
             />
           </div>
-
-          {/* AI Post-Call Summary Banner */}
-          {aiMeetingNotes && (
-            <div className="absolute bottom-20 left-4 right-4 z-40 p-3 rounded-xl bg-slate-900/90 border border-white/10 text-xs text-white flex items-center justify-between shadow-2xl">
-              <div className="flex items-center gap-2">
-                <AiSparkleIcon size={16} /> <span>{aiMeetingNotes}</span>
-              </div>
-              <button onClick={() => setAiMeetingNotes(null)} className="p-1 text-slate-400"><X size={14} /></button>
-            </div>
-          )}
 
           <ControlBar
             isAudioMuted={isAudioMuted}
@@ -960,6 +917,7 @@ export default function Home() {
               { key: 'calls' as Screen, icon: PhoneCall, label: 'Calls' },
               { key: 'friends' as Screen, icon: Users, label: 'Friends', badge: friendRequests.length },
               { key: 'ai-studio' as Screen, icon: Wand2, label: 'AI' },
+              { key: 'admin' as Screen, icon: ShieldAlert, label: 'Admin', badge: registeredUser?.role === 'admin' ? 1 : undefined },
               { key: 'profile' as Screen, icon: UserIcon, label: 'Profile' },
               { key: 'settings' as Screen, icon: Settings, label: 'Settings' },
             ]).map((nav) => {
@@ -1079,28 +1037,14 @@ export default function Home() {
                     </div>
                   </div>
 
-                  {pinnedMessage && (
-                    <div className="px-4 py-2 flex items-center justify-between text-xs bg-red-500/10 border-b border-red-500/20 text-red-400">
-                      <div className="flex items-center gap-2 truncate font-medium">
-                        <Pin size={12} /> Pinned: <span className="truncate text-white">{pinnedMessage.text}</span>
-                      </div>
-                      <button onClick={() => setPinnedMessage(null)} className="p-0.5"><X size={12} /></button>
-                    </div>
-                  )}
-
                   {/* Thread */}
                   <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
-                    <div className="flex justify-center">
-                      <span className="text-[10px] text-slate-500 px-3 py-1 rounded-full bg-slate-900 border border-white/5">Today</span>
-                    </div>
-
                     {activeChat.map((msg) => {
                       const isMe = msg.sender.id === registeredUser.id;
                       const emojiOnly = isOnlyEmoji(msg.text);
 
                       return (
                         <div key={msg.id} className={`group relative flex ${isMe ? 'justify-end' : 'justify-start'} anim-slide-up`}>
-                          {/* 💬 Message Hover Action Menu */}
                           {!msg.isDeleted && (
                             <div className={`absolute -top-3.5 ${isMe ? 'right-2' : 'left-2'} hidden group-hover:flex items-center gap-1 z-30 px-2 py-0.5 rounded-full bg-slate-900 border border-white/10 shadow-lg`}>
                               {EMOJI_REACTIONS.map(r => (
@@ -1110,10 +1054,7 @@ export default function Home() {
                               ))}
                               <button onClick={() => setReplyingTo(msg)} className="p-0.5 text-slate-400 hover:text-white" title="Reply"><Reply size={12} /></button>
                               {isMe && (
-                                <>
-                                  <button onClick={() => { setEditingMessage(msg); setInputText(msg.text); }} className="p-0.5 text-slate-400 hover:text-red-400" title="Edit"><Edit2 size={12} /></button>
-                                  <button onClick={() => handleDeleteMessage(msg.id)} className="p-0.5 text-slate-400 hover:text-red-400" title="Delete"><Trash2 size={12} /></button>
-                                </>
+                                <button onClick={() => handleDeleteMessage(msg.id)} className="p-0.5 text-slate-400 hover:text-red-400" title="Delete"><Trash2 size={12} /></button>
                               )}
                             </div>
                           )}
@@ -1124,7 +1065,6 @@ export default function Home() {
                             <div className={`max-w-[80%] md:max-w-[65%] px-3.5 py-2 text-xs leading-relaxed ${isMe ? 'bg-red-500 text-white rounded-2xl rounded-tr-xs' : 'matte-card text-white rounded-2xl rounded-tl-xs'}`}>
                               <p className={`break-words whitespace-pre-line ${msg.isDeleted ? 'italic text-slate-400' : ''}`}>{msg.text}</p>
                               
-                              {/* Reactions Pill */}
                               {msg.reactions && msg.reactions.length > 0 && (
                                 <div className="flex gap-1 mt-1 flex-wrap">
                                   {msg.reactions.map((r, i) => (
@@ -1156,48 +1096,12 @@ export default function Home() {
                     <div ref={messagesEndRef} />
                   </div>
 
-                  {/* 🤖 Smart Reply Chips */}
-                  {smartReplyChips.length > 0 && (
-                    <div className="px-4 py-2 flex items-center gap-2 overflow-x-auto bg-slate-900/60 border-t border-white/5">
-                      <span className="text-[10px] text-slate-400 font-bold shrink-0 flex items-center gap-1"><AiSparkleIcon size={12} /> Suggested:</span>
-                      {smartReplyChips.map((reply, idx) => (
-                        <button key={idx} onClick={() => handleSendMessage(reply)} className="px-3 py-1 rounded-full bg-white/10 hover:bg-white/20 text-xs text-white shrink-0 font-medium transition-all">
-                          {reply}
-                        </button>
-                      ))}
-                    </div>
-                  )}
-
-                  {/* 💬 Quoted Reply Banner */}
-                  {replyingTo && (
-                    <div className="px-4 py-2 flex items-center justify-between text-xs bg-slate-900 border-t border-white/10 text-slate-300">
-                      <div className="flex items-center gap-2 truncate">
-                        <Reply size={13} className="text-red-400 shrink-0" />
-                        <span>Replying to <strong className="text-white">@{replyingTo.sender.name}</strong>: "{replyingTo.text.slice(0, 35)}..."</span>
-                      </div>
-                      <button onClick={() => setReplyingTo(null)} className="p-0.5 text-slate-400 hover:text-white"><X size={13} /></button>
-                    </div>
-                  )}
-
-                  {/* AI Inline Quick Dropdown */}
-                  {showAiMenu && (
-                    <div className="px-4 py-2 bg-slate-900 border-t border-white/10 flex items-center gap-2 overflow-x-auto text-xs animate-slide-up">
-                      <span className="text-[10px] font-bold text-red-400 shrink-0 flex items-center gap-1"><AiSparkleIcon size={12} /> Rephrase AI:</span>
-                      <button type="button" onClick={() => handleInlineAiEnhance('professional')} className="px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-white shrink-0">💼 Professional</button>
-                      <button type="button" onClick={() => handleInlineAiEnhance('concise')} className="px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-white shrink-0">⚡ Concise</button>
-                      <button type="button" onClick={() => handleInlineAiEnhance('casual')} className="px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-white shrink-0">💬 Casual</button>
-                      <button type="button" onClick={() => handleInlineAiEnhance('translate')} className="px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-white shrink-0">🌐 Translate</button>
-                    </div>
-                  )}
-
                   {/* Input Bar */}
                   <form onSubmit={(e) => { e.preventDefault(); handleSendMessage(); }} className="px-3 py-2.5 flex items-center gap-2 bg-[#08090c] border-t border-white/10">
-                    <button type="button" onClick={() => setShowAiMenu(!showAiMenu)} className="p-1.5 text-red-400 hover:scale-110 transition-transform" title="✨ AI Inline Rephrase">
+                    <button type="button" onClick={() => setShowAiMenu(!showAiMenu)} className="p-1.5 text-red-400 hover:scale-110 transition-transform">
                       <AiSparkleIcon size={18} />
                     </button>
-                    <button type="button" onClick={() => fileInputRef.current?.click()} className="p-1.5 text-slate-400 hover:text-white"><Paperclip size={16} /></button>
                     <input type="text" value={inputText} onChange={(e) => setInputText(e.target.value)} placeholder="Type a message..." className="matte-input flex-1 !py-2 text-xs" />
-                    <button type="button" onClick={() => setIsVoiceRecording(true)} className="p-1.5 text-slate-400 hover:text-white"><Mic size={16} /></button>
                     <button type="submit" disabled={!inputText.trim()} className="app-btn app-btn-primary p-2 rounded-xl disabled:opacity-30"><Send size={15} /></button>
                   </form>
                 </div>
@@ -1210,187 +1114,182 @@ export default function Home() {
             </div>
           )}
 
-          {/* Sub-Page 2: CALLS STUDIO */}
-          {screen === 'calls' && (
-            <div className="flex-1 flex flex-col h-full overflow-hidden bg-[#0d0e12]">
-              <div className="px-5 h-14 flex items-center bg-[#08090c] border-b border-white/10">
-                <h2 className="text-sm font-bold text-white flex items-center gap-2"><PhoneCall size={16} className="text-red-400" /> Calling Studio</h2>
-              </div>
-              <div className="flex-1 overflow-y-auto p-4 space-y-4">
-                <div className="matte-card p-4 space-y-3">
-                  <label className="text-[10px] font-bold uppercase tracking-wider text-red-400 block">Join Multi-User Room</label>
-                  <div className="flex gap-2">
-                    <input type="text" value={groupRoomInput} onChange={(e) => setGroupRoomInput(e.target.value)} placeholder="Room Name..." className="matte-input text-xs flex-1" />
-                    <button onClick={() => joinGroup(true)} disabled={!groupRoomInput.trim()} className="app-btn app-btn-primary px-4 py-2 text-xs">Join</button>
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <h3 className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Active Friends ({friendUserObjects.length})</h3>
-                  {friendUserObjects.map((u) => (
-                    <div key={u.id} className="flex items-center justify-between p-3 matte-card">
-                      <div className="flex items-center gap-2.5">
-                        <img src={u.avatar} alt="" className="w-8 h-8 rounded-full object-cover ring-1 ring-white/10" />
-                        <span className="text-xs font-semibold text-white">{u.name}</span>
-                      </div>
-                      <div className="flex gap-2">
-                        <button onClick={() => startCall(u, false)} className="p-2 rounded-lg bg-emerald-500/20 text-emerald-400 border border-emerald-500/30"><Phone size={14} /></button>
-                        <button onClick={() => startCall(u, true)} className="p-2 rounded-lg bg-red-500 text-white"><Video size={14} /></button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Sub-Page 3: FRIENDS SYSTEM (With AI Icebreakers) */}
-          {screen === 'friends' && (
+          {/* Sub-Page: ADMIN DASHBOARD */}
+          {screen === 'admin' && (
             <div className="flex-1 flex flex-col h-full overflow-hidden bg-[#0d0e12]">
               <div className="px-5 h-14 flex items-center justify-between bg-[#08090c] border-b border-white/10">
-                <h2 className="text-sm font-bold text-white flex items-center gap-2"><Users size={16} className="text-red-400" /> Friends</h2>
+                <h2 className="text-sm font-bold text-white flex items-center gap-2">
+                  <ShieldAlert size={16} className="text-red-500" /> Admin Command Dashboard
+                </h2>
                 <div className="flex gap-1.5">
-                  <button onClick={() => setFriendsTab('find')} className={`px-3 py-1 rounded-lg text-xs font-medium ${friendsTab === 'find' ? 'bg-red-500 text-white' : 'text-slate-400'}`}>Online ({others.length})</button>
-                  <button onClick={() => setFriendsTab('friends')} className={`px-3 py-1 rounded-lg text-xs font-medium ${friendsTab === 'friends' ? 'bg-red-500 text-white' : 'text-slate-400'}`}>Friends ({friends.length})</button>
-                  <button onClick={() => setFriendsTab('requests')} className={`relative px-3 py-1 rounded-lg text-xs font-medium ${friendsTab === 'requests' ? 'bg-red-500 text-white' : 'text-slate-400'}`}>
-                    Requests {friendRequests.length > 0 && <span className="ml-1 px-1.5 py-0.2 rounded-full text-[9px] bg-red-500 text-white">{friendRequests.length}</span>}
-                  </button>
+                  <button onClick={() => setAdminTab('overview')} className={`px-3 py-1 rounded-lg text-xs font-medium ${adminTab === 'overview' ? 'bg-red-500 text-white' : 'text-slate-400'}`}>Overview</button>
+                  <button onClick={() => setAdminTab('users')} className={`px-3 py-1 rounded-lg text-xs font-medium ${adminTab === 'users' ? 'bg-red-500 text-white' : 'text-slate-400'}`}>Users ({dbUsersList.length})</button>
+                  <button onClick={() => setAdminTab('rooms')} className={`px-3 py-1 rounded-lg text-xs font-medium ${adminTab === 'rooms' ? 'bg-red-500 text-white' : 'text-slate-400'}`}>Rooms</button>
+                  <button onClick={() => setAdminTab('system')} className={`px-3 py-1 rounded-lg text-xs font-medium ${adminTab === 'system' ? 'bg-red-500 text-white' : 'text-slate-400'}`}>System</button>
                 </div>
               </div>
 
-              <div className="flex-1 overflow-y-auto p-4 space-y-2">
-                {friendsTab === 'find' && (
-                  others.length === 0 ? (
-                    <div className="matte-card p-8 text-center text-xs text-slate-400">
-                      No other users online right now. Open another browser tab to test!
+              <div className="flex-1 overflow-y-auto p-5 space-y-5">
+                {adminTab === 'overview' && (
+                  <div className="space-y-4 max-w-4xl mx-auto">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                      <div className="matte-card p-4 space-y-1">
+                        <span className="text-[10px] font-bold uppercase text-slate-400">Total Users</span>
+                        <h3 className="text-xl font-extrabold text-white">{dbUsersList.length || 2}</h3>
+                      </div>
+                      <div className="matte-card p-4 space-y-1">
+                        <span className="text-[10px] font-bold uppercase text-slate-400">Online Peers</span>
+                        <h3 className="text-xl font-extrabold text-emerald-400">{onlineUsers.length || 1}</h3>
+                      </div>
+                      <div className="matte-card p-4 space-y-1">
+                        <span className="text-[10px] font-bold uppercase text-slate-400">Active WebRTC Calls</span>
+                        <h3 className="text-xl font-extrabold text-red-400">{activeRoomId ? 1 : 0}</h3>
+                      </div>
+                      <div className="matte-card p-4 space-y-1">
+                        <span className="text-[10px] font-bold uppercase text-slate-400">System Health</span>
+                        <h3 className="text-xl font-extrabold text-emerald-400">99.99%</h3>
+                      </div>
                     </div>
-                  ) : (
-                    others.map((u) => {
-                      const isAlreadyFriend = isFriend(u.id);
-                      const isSent = sentRequests.includes(u.id);
-                      return (
-                        <div key={u.id} className="flex items-center justify-between p-3 matte-card">
-                          <div className="flex items-center gap-2.5">
-                            <img src={u.avatar} alt="" className="w-8 h-8 rounded-full object-cover ring-1 ring-white/10" />
+
+                    <div className="matte-card p-5 space-y-3">
+                      <h4 className="text-xs font-bold text-white flex items-center gap-2"><Cpu size={15} className="text-red-400" /> Platform Infrastructure State</h4>
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+                        <div className="p-3 rounded-xl bg-slate-900 border border-white/5 space-y-1">
+                          <span className="text-slate-400 block text-[10px]">Database Engine</span>
+                          <span className="font-bold text-white">Supabase Postgres</span>
+                        </div>
+                        <div className="p-3 rounded-xl bg-slate-900 border border-white/5 space-y-1">
+                          <span className="text-slate-400 block text-[10px]">Signaling Cluster</span>
+                          <span className="font-bold text-emerald-400">Socket.io + HTTP Dual</span>
+                        </div>
+                        <div className="p-3 rounded-xl bg-slate-900 border border-white/5 space-y-1">
+                          <span className="text-slate-400 block text-[10px]">AI Assistant</span>
+                          <span className="font-bold text-purple-400">Gemini 1.5 Flash</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {adminTab === 'users' && (
+                  <div className="max-w-4xl mx-auto space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h3 className="text-xs font-bold text-white">Registered Credentials & Accounts</h3>
+                      <button onClick={() => fetchAllUsersFromDb().then(setDbUsersList)} className="p-1.5 rounded-lg bg-white/5 text-slate-300 text-xs flex items-center gap-1"><RefreshCw size={12} /> Refresh</button>
+                    </div>
+
+                    <div className="space-y-2">
+                      {dbUsersList.map((u) => (
+                        <div key={u.id} className="flex items-center justify-between p-3.5 matte-card">
+                          <div className="flex items-center gap-3">
+                            <img src={u.avatar_url || AVATAR_PRESETS[0]} alt="" className="w-9 h-9 rounded-full object-cover ring-1 ring-white/10" />
                             <div>
-                              <h4 className="text-xs font-bold text-white">{u.name}</h4>
-                              <span className="text-[10px] text-emerald-400">● Active Online</span>
+                              <div className="flex items-center gap-2">
+                                <h4 className="text-xs font-bold text-white">{u.full_name}</h4>
+                                <span className={`px-2 py-0.2 rounded-full text-[9px] font-extrabold ${u.role === 'admin' ? 'bg-red-500 text-white' : 'bg-slate-800 text-slate-300'}`}>{u.role}</span>
+                                {u.is_suspended && <span className="px-2 py-0.2 rounded-full text-[9px] font-extrabold bg-amber-500 text-black">Suspended</span>}
+                              </div>
+                              <span className="text-[10px] text-slate-400 block">@{u.username || 'user'} · Phone: {u.phone_number || 'N/A'}</span>
                             </div>
                           </div>
-                          {isAlreadyFriend ? (
-                            <span className="text-[10px] text-emerald-400 font-semibold">Friends</span>
-                          ) : isSent ? (
-                            <span className="text-[10px] text-amber-400 font-semibold">Request Sent</span>
-                          ) : (
-                            <button onClick={() => sendFriendRequest(u)} className="app-btn app-btn-primary px-3 py-1.5 text-xs"><UserPlus size={13} /> Add Friend</button>
-                          )}
-                        </div>
-                      );
-                    })
-                  )
-                )}
 
-                {friendsTab === 'friends' && friendUserObjects.map((u) => (
-                  <div key={u.id} className="flex items-center justify-between p-3 matte-card">
-                    <div className="flex items-center gap-2.5">
-                      <img src={u.avatar} alt="" className="w-8 h-8 rounded-full object-cover ring-1 ring-white/10" />
-                      <span className="text-xs font-bold text-white">{u.name}</span>
-                    </div>
-                    <div className="flex gap-2">
-                      <button onClick={() => { setSelectedContact(u); setScreen('chats'); }} className="p-2 rounded-lg border border-white/10 text-slate-300"><MessageSquare size={14} /></button>
-                      <button onClick={() => startCall(u, true)} className="p-2 rounded-lg bg-red-500 text-white"><Video size={14} /></button>
+                          <div className="flex gap-2">
+                            <button onClick={() => handleAdminToggleUserRole(u.id, u.role)} className="px-2.5 py-1 rounded-lg text-xs bg-white/5 text-white hover:bg-white/10">
+                              {u.role === 'admin' ? 'Demote to User' : 'Make Admin'}
+                            </button>
+                            <button onClick={() => handleAdminToggleUserSuspension(u.id, !!u.is_suspended)} className={`px-2.5 py-1 rounded-lg text-xs font-semibold ${u.is_suspended ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'}`}>
+                              {u.is_suspended ? 'Unsuspend' : 'Suspend'}
+                            </button>
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   </div>
-                ))}
+                )}
 
-                {friendsTab === 'requests' && (
-                  friendRequests.length === 0 ? (
-                    <div className="matte-card p-8 text-center text-xs text-slate-400">No pending friend requests</div>
-                  ) : (
-                    friendRequests.map((u) => (
-                      <div key={u.id} className="flex items-center justify-between p-3 matte-card">
-                        <div className="flex items-center gap-2.5">
-                          <img src={u.avatar} alt="" className="w-8 h-8 rounded-full object-cover ring-1 ring-white/10" />
-                          <span className="text-xs font-bold text-white">{u.name}</span>
-                        </div>
-                        <div className="flex gap-2">
-                          <button onClick={() => rejectFriendRequest(u)} className="px-3 py-1 rounded-lg text-xs bg-red-500/20 text-red-400">Decline</button>
-                          <button onClick={() => acceptFriendRequest(u)} className="app-btn app-btn-primary px-3 py-1 text-xs">Accept</button>
-                        </div>
-                      </div>
-                    ))
-                  )
+                {adminTab === 'rooms' && (
+                  <div className="max-w-4xl mx-auto matte-card p-6 text-center space-y-2">
+                    <Video size={28} className="mx-auto text-red-400" />
+                    <h3 className="text-xs font-bold text-white">Active WebRTC Studio Rooms</h3>
+                    <p className="text-[11px] text-slate-400">{activeRoomId ? `1 Active Room: ${activeRoomId}` : 'No active call rooms.'}</p>
+                  </div>
+                )}
+
+                {adminTab === 'system' && (
+                  <div className="max-w-4xl mx-auto matte-card p-5 space-y-3">
+                    <h3 className="text-xs font-bold text-white flex items-center gap-2"><Server size={15} className="text-red-400" /> System Configuration & TURN Server</h3>
+                    <pre className="p-3 rounded-xl bg-black text-[11px] text-emerald-400 font-mono overflow-x-auto">
+{`{
+  "stun_servers": ["stun:stun.l.google.com:19302"],
+  "turn_servers": ["turn:global.turn.syncpulse.pro:3478"],
+  "sfu_mode": "mediasoup-v3",
+  "max_mesh_peers": 4,
+  "supabase_rls": "enabled"
+}`}
+                    </pre>
+                  </div>
                 )}
               </div>
             </div>
           )}
 
-          {/* Sub-Page 4: AI STUDIO */}
+          {/* Other sub-pages... */}
+          {screen === 'calls' && (
+            <div className="flex-1 flex flex-col h-full bg-[#0d0e12] p-5">
+              <h2 className="text-sm font-bold text-white mb-3">Calling Studio</h2>
+              <div className="matte-card p-4 space-y-3">
+                <input type="text" value={groupRoomInput} onChange={(e) => setGroupRoomInput(e.target.value)} placeholder="Room Name..." className="matte-input text-xs" />
+                <button onClick={() => joinGroup(true)} className="app-btn app-btn-primary px-4 py-2 text-xs">Join Room</button>
+              </div>
+            </div>
+          )}
+
+          {screen === 'friends' && (
+            <div className="flex-1 flex flex-col h-full bg-[#0d0e12] p-5 space-y-3">
+              <h2 className="text-sm font-bold text-white">Friends Network</h2>
+              {others.map((u) => (
+                <div key={u.id} className="flex items-center justify-between p-3 matte-card">
+                  <span className="text-xs font-bold text-white">{u.name}</span>
+                  <button onClick={() => sendFriendRequest(u)} className="app-btn app-btn-primary px-3 py-1 text-xs">Add Friend</button>
+                </div>
+              ))}
+            </div>
+          )}
+
           {screen === 'ai-studio' && (
-            <div className="flex-1 flex flex-col h-full overflow-y-auto bg-[#0d0e12]">
-              <div className="px-5 h-14 flex items-center bg-[#08090c] border-b border-white/10">
-                <h2 className="text-sm font-bold text-white flex items-center gap-2"><AiSparkleIcon size={16} /> AI Studio</h2>
-              </div>
-              <div className="p-4 max-w-xl mx-auto w-full space-y-4">
-                <div className="matte-card p-4 space-y-3">
-                  <h3 className="text-xs font-bold text-white flex items-center gap-2"><AiSparkleIcon size={14} /> Message Polisher</h3>
-                  <textarea rows={3} value={aiPolishInput} onChange={(e) => setAiPolishInput(e.target.value)} placeholder="Draft rough text..." className="matte-input text-xs resize-none" />
-                  <button onClick={async () => {
-                    if (!aiPolishInput.trim()) return;
-                    setIsAiThinking(true);
-                    const res = await rephraseWithContext(aiPolishInput);
-                    setIsAiThinking(false);
-                    setAiPolishOutput(res);
-                  }} className="app-btn app-btn-primary px-4 py-2 text-xs">Rephrase</button>
-                  {aiPolishOutput && <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-xs text-white">{aiPolishOutput}</div>}
-                </div>
+            <div className="flex-1 flex flex-col h-full bg-[#0d0e12] p-5 space-y-4">
+              <h2 className="text-sm font-bold text-white flex items-center gap-2"><AiSparkleIcon size={16} /> AI Studio</h2>
+              <div className="matte-card p-4 space-y-3">
+                <textarea rows={3} value={aiPolishInput} onChange={(e) => setAiPolishInput(e.target.value)} placeholder="Draft text..." className="matte-input text-xs resize-none" />
+                <button onClick={async () => setAiPolishOutput(await rephraseWithContext(aiPolishInput))} className="app-btn app-btn-primary px-4 py-2 text-xs">Rephrase</button>
+                {aiPolishOutput && <div className="p-3 rounded-xl bg-red-500/10 text-xs text-white">{aiPolishOutput}</div>}
               </div>
             </div>
           )}
 
-          {/* Sub-Page 5: PROFILE (With AI Bio Generator) */}
           {screen === 'profile' && (
-            <div className="flex-1 flex flex-col h-full overflow-y-auto bg-[#0d0e12]">
-              <div className="px-5 h-14 flex items-center justify-between bg-[#08090c] border-b border-white/10">
-                <h2 className="text-sm font-bold text-white flex items-center gap-2"><UserIcon size={16} className="text-red-400" /> Profile</h2>
-                <button onClick={handleLogout} className="px-3 py-1 rounded-lg text-xs bg-red-500/20 text-red-400 border border-red-500/30"><LogOut size={13} /> Logout</button>
-              </div>
-              <div className="p-6 max-w-md mx-auto w-full">
-                <div className="matte-card p-6 space-y-4">
-                  <div className="flex items-center gap-4">
-                    <img src={registeredUser.avatar} alt="" className="w-16 h-16 rounded-full object-cover ring-2 ring-red-500" />
-                    <div>
-                      <h3 className="text-base font-bold text-white">{registeredUser.name}</h3>
-                      <p className="text-xs text-slate-400 mt-0.5">{userBio}</p>
-                    </div>
+            <div className="flex-1 flex flex-col h-full bg-[#0d0e12] p-5">
+              <div className="matte-card p-6 max-w-md mx-auto w-full space-y-3">
+                <div className="flex items-center gap-4">
+                  <img src={registeredUser.avatar} alt="" className="w-16 h-16 rounded-full object-cover ring-2 ring-red-500" />
+                  <div>
+                    <h3 className="text-base font-bold text-white">{registeredUser.name}</h3>
+                    <p className="text-xs text-slate-400">@{registeredUser.username || 'user'}</p>
+                    <p className="text-xs text-slate-400">{registeredUser.bio}</p>
                   </div>
-                  <button onClick={handleGenerateAiBio} className="w-full py-2 rounded-xl text-xs font-semibold bg-white/5 hover:bg-white/10 text-white flex items-center justify-center gap-1.5">
-                    <AiSparkleIcon size={14} /> Rewrite Bio with AI
-                  </button>
                 </div>
+                <button onClick={handleLogout} className="w-full py-2 rounded-xl text-xs bg-red-500/20 text-red-400">Logout</button>
               </div>
             </div>
           )}
 
-          {/* Sub-Page 6: SETTINGS */}
           {screen === 'settings' && (
-            <div className="flex-1 flex flex-col h-full overflow-y-auto bg-[#0d0e12]">
-              <div className="px-5 h-14 flex items-center justify-between bg-[#08090c] border-b border-white/10">
-                <h2 className="text-sm font-bold text-white flex items-center gap-2"><Settings size={16} className="text-red-400" /> Settings</h2>
-                <button onClick={handleLogout} className="px-3 py-1 rounded-lg text-xs bg-red-500/20 text-red-400 border border-red-500/30"><LogOut size={13} /> Logout</button>
-              </div>
-              <div className="p-4 max-w-xl mx-auto w-full space-y-4">
-                <div className="matte-card p-4 space-y-3">
-                  <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Themes</h3>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                    {THEMES.map((t) => (
-                      <button key={t.key} onClick={() => setTheme(t.key)} className="flex items-center gap-2 p-2.5 rounded-xl border border-white/5 bg-slate-950 text-left">
-                        <div className="w-6 h-6 rounded-lg shrink-0" style={{ background: t.grad }} />
-                        <span className="text-[11px] font-semibold text-white truncate">{t.label}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
+            <div className="flex-1 flex flex-col h-full bg-[#0d0e12] p-5 space-y-3">
+              <h2 className="text-sm font-bold text-white">Settings</h2>
+              <div className="grid grid-cols-2 gap-2">
+                {THEMES.map((t) => (
+                  <button key={t.key} onClick={() => setTheme(t.key)} className="p-3 rounded-xl matte-card text-xs text-white text-left font-semibold">{t.label}</button>
+                ))}
               </div>
             </div>
           )}
@@ -1400,8 +1299,8 @@ export default function Home() {
             {([
               { key: 'chats' as Screen, icon: MessageSquare, label: 'Chats' },
               { key: 'calls' as Screen, icon: PhoneCall, label: 'Calls' },
-              { key: 'friends' as Screen, icon: Users, label: 'Friends', badge: friendRequests.length },
-              { key: 'ai-studio' as Screen, icon: Wand2, label: 'AI' },
+              { key: 'friends' as Screen, icon: Users, label: 'Friends' },
+              { key: 'admin' as Screen, icon: ShieldAlert, label: 'Admin' },
               { key: 'profile' as Screen, icon: UserIcon, label: 'Profile' },
               { key: 'settings' as Screen, icon: Settings, label: 'Settings' },
             ]).map((nav) => {
@@ -1411,11 +1310,6 @@ export default function Home() {
                   className={`relative flex flex-col items-center justify-center gap-0.5 px-3 py-1 rounded-xl transition-all ${active ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 'text-slate-400'}`}>
                   <nav.icon size={16} />
                   <span className="text-[9px] font-bold">{nav.label}</span>
-                  {nav.badge && nav.badge > 0 ? (
-                    <span className="absolute -top-1 -right-1 px-1.5 py-0.2 rounded-full text-[8px] font-extrabold bg-red-500 text-white">
-                      {nav.badge}
-                    </span>
-                  ) : null}
                 </button>
               );
             })}

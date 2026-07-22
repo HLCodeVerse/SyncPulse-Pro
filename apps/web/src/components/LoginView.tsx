@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Radio, Lock, ShieldAlert, Sparkles, UserCheck, Phone, User as UserIcon, Key } from 'lucide-react';
+import { Radio, Lock, ShieldAlert, Sparkles, UserCheck, Phone, User as UserIcon, Key, ArrowRight } from 'lucide-react';
 import { AiSparkleIcon } from './SplashView';
 
 interface LoginViewProps {
@@ -16,7 +16,7 @@ interface LoginViewProps {
   selectedAvatar: string;
   setSelectedAvatar: (v: string) => void;
   AVATAR_PRESETS: string[];
-  handleRegister: (e: React.FormEvent) => void;
+  onLoginSuccess: (userObj: any) => void;
 }
 
 export function LoginView({
@@ -26,28 +26,80 @@ export function LoginView({
   userRole, setUserRole,
   selectedAvatar, setSelectedAvatar,
   AVATAR_PRESETS,
-  handleRegister
+  onLoginSuccess
 }: LoginViewProps) {
   const [isRegisterMode, setIsRegisterMode] = useState(false);
-  const [isAdminPortalMode, setIsAdminPortalMode] = useState(false);
-  const [adminPasscode, setAdminPasscode] = useState('');
+  const [loginQuery, setLoginQuery] = useState('');
+  const [errorMsg, setErrorMsg] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  const onFormSubmit = (e: React.FormEvent) => {
+  const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isAdminPortalMode) {
-      if (adminPasscode !== 'admin123' && adminPasscode !== 'Chandan@9777767188') {
-        alert("Invalid Admin Passcode! Access Denied.");
-        return;
+    setErrorMsg('');
+    setLoading(true);
+
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ usernameOrPhone: loginQuery || userName })
+      });
+
+      const data = await res.json();
+      setLoading(false);
+
+      if (data.success && data.user) {
+        onLoginSuccess(data.user);
+      } else if (data.notFound) {
+        setErrorMsg('User not found in Supabase Database. Please create an account below.');
+        setIsRegisterMode(true);
+        setUserName(loginQuery);
+      } else {
+        setErrorMsg(data.error || 'Login failed. Please try again.');
       }
-      setUserRole('admin');
-      if (!userName.trim()) setUserName('System Super Admin');
+    } catch (err: any) {
+      setLoading(false);
+      setErrorMsg('Network error. Signing in local session...');
+      onLoginSuccess({ id: `u_${Date.now()}`, name: loginQuery || 'User', username: loginQuery, role: 'user', avatar: selectedAvatar });
     }
-    handleRegister(e);
+  };
+
+  const handleRegisterSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMsg('');
+    setLoading(true);
+
+    try {
+      const res = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fullName: userName,
+          username: userHandle || userName.toLowerCase().replace(/\s+/g, '_'),
+          phone: userPhone,
+          avatarUrl: selectedAvatar,
+          bio: 'SyncPulse Pro Enterprise User'
+        })
+      });
+
+      const data = await res.json();
+      setLoading(false);
+
+      if (data.success && data.user) {
+        onLoginSuccess(data.user);
+      } else {
+        setErrorMsg(data.error || 'Registration failed.');
+      }
+    } catch (err: any) {
+      setLoading(false);
+      setErrorMsg('Error creating account. Created local profile.');
+      onLoginSuccess({ id: `u_${Date.now()}`, name: userName, username: userHandle, phone: userPhone, role: 'user', avatar: selectedAvatar });
+    }
   };
 
   return (
     <div className="fixed inset-0 w-screen h-screen flex flex-col lg:flex-row overflow-hidden z-50 bg-black">
-      {/* Left Feature Showcase */}
+      {/* Left Showcase */}
       <div className="hidden lg:flex w-1/2 h-full flex-col justify-between p-12 relative border-r border-white/10 bg-[#06070a]">
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-red-500 flex items-center justify-center text-white font-bold shadow-lg shadow-red-500/20">
@@ -58,33 +110,27 @@ export function LoginView({
 
         <div className="space-y-4 max-w-md">
           <span className="px-3 py-1 rounded-full text-[11px] font-semibold bg-red-500/10 text-red-400 border border-red-500/30 inline-flex items-center gap-1.5">
-            <Radio size={13} className="animate-pulse" /> AMOLED AI & WebRTC Platform
+            <Radio size={13} className="animate-pulse" /> Live Supabase Postgres DB Auth
           </span>
           <h1 className="text-3xl xl:text-4xl font-extrabold tracking-tight text-white leading-tight">
-            {isAdminPortalMode ? 'Isolated Admin Control Command Panel' : 'Enterprise Real-Time Student Communication Hub'}
+            Enterprise WebRTC & AI Communication Workspace
           </h1>
           <p className="text-xs text-slate-400 leading-relaxed font-medium">
-            {isAdminPortalMode
-              ? 'Authorized Administrator Portal for managing user credentials, monitoring active call streams, and controlling system settings.'
-              : 'Connect with peers via ultra-low latency WebRTC video calls, instant messaging, and Gemini AI assistant.'}
+            Connect with peers, initiate P2P video calls, and query Gemini AI assistant with database persistence.
           </p>
         </div>
 
         <div className="text-[11px] text-slate-600 font-medium flex items-center justify-between">
-          <span>© 2026 SyncPulse Pro · Secure Architecture</span>
-          <button
-            type="button"
-            onClick={() => { setIsAdminPortalMode(!isAdminPortalMode); setUserRole(isAdminPortalMode ? 'user' : 'admin'); }}
-            className="text-[10px] text-slate-500 hover:text-red-400 underline flex items-center gap-1"
-          >
-            <ShieldAlert size={12} /> {isAdminPortalMode ? 'Return to Student Login' : 'Admin Portal Access'}
-          </button>
+          <span>© 2026 SyncPulse Pro · Database Connected</span>
+          <a href="/admin" className="text-[10px] text-slate-500 hover:text-red-400 underline flex items-center gap-1">
+            <ShieldAlert size={12} /> Go to Admin Route (`/admin`)
+          </a>
         </div>
       </div>
 
-      {/* Right Login / Registration Form */}
+      {/* Right Login/Register Form */}
       <div className="flex-1 h-full flex flex-col items-center justify-center p-6 bg-black overflow-y-auto relative">
-        <form onSubmit={onFormSubmit} className="w-full max-w-sm space-y-4 my-auto relative z-10">
+        <div className="w-full max-w-sm space-y-4 my-auto relative z-10">
           <div className="lg:hidden flex flex-col items-center text-center mb-1">
             <div className="w-12 h-12 rounded-2xl bg-red-500 flex items-center justify-center text-white mb-2 shadow-lg">
               <AiSparkleIcon size={26} />
@@ -93,39 +139,23 @@ export function LoginView({
           </div>
 
           <div className="matte-card p-6 space-y-4 border border-white/10 shadow-2xl backdrop-blur-2xl bg-[#0b0c10]/90">
-            {isAdminPortalMode ? (
-              <div className="space-y-4">
-                <div className="flex items-center gap-2 text-red-500">
-                  <ShieldAlert size={18} />
-                  <h2 className="text-base font-bold text-white tracking-tight">Admin System Authentication</h2>
-                </div>
-                <p className="text-[11px] text-slate-400">Enter master administrator passcode to access command panel:</p>
-
-                <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-wider mb-1 text-slate-400">Admin Username</label>
-                  <input type="text" value={userName} onChange={(e) => setUserName(e.target.value)} placeholder="admin" className="matte-input !py-2 text-xs" required />
-                </div>
-
-                <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-wider mb-1 text-slate-400">Master Admin Passcode</label>
-                  <input type="password" value={adminPasscode} onChange={(e) => setAdminPasscode(e.target.value)} placeholder="••••••••" className="matte-input !py-2 text-xs" required />
-                </div>
-
-                <button type="submit" className="app-btn app-btn-primary w-full py-2.5 text-xs font-bold shadow-md flex items-center justify-center gap-2">
-                  <Lock size={15} /> Authenticate Admin Portal
-                </button>
+            {errorMsg && (
+              <div className="p-3 rounded-xl bg-red-500/15 border border-red-500/30 text-xs text-red-300 font-medium">
+                {errorMsg}
               </div>
-            ) : isRegisterMode ? (
-              <div className="space-y-4">
+            )}
+
+            {isRegisterMode ? (
+              <form onSubmit={handleRegisterSubmit} className="space-y-4">
                 <div className="flex items-center justify-between">
-                  <h2 className="text-base font-bold text-white tracking-tight">Create Student Account</h2>
+                  <h2 className="text-base font-bold text-white tracking-tight">Create Database Account</h2>
                   <button type="button" onClick={() => setIsRegisterMode(false)} className="text-xs text-red-400 font-semibold hover:underline">
                     Back to Login
                   </button>
                 </div>
 
                 <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-wider mb-2 text-slate-400">Choose Profile Avatar</label>
+                  <label className="block text-[10px] font-bold uppercase tracking-wider mb-2 text-slate-400">Profile Avatar</label>
                   <div className="flex justify-between gap-2">
                     {AVATAR_PRESETS.map((url, i) => (
                       <img key={i} src={url} alt="" onClick={() => setSelectedAvatar(url)} className="w-9 h-9 rounded-full object-cover cursor-pointer transition-all hover:scale-110" style={{ border: selectedAvatar === url ? '2px solid #ff453a' : '2px solid transparent' }} />
@@ -135,7 +165,7 @@ export function LoginView({
 
                 <div>
                   <label className="block text-[10px] font-bold uppercase tracking-wider mb-1 text-slate-400">Full Display Name</label>
-                  <input type="text" value={userName} onChange={(e) => setUserName(e.target.value)} placeholder="e.g. Sarah Sanders" className="matte-input !py-1.5 text-xs" required autoFocus />
+                  <input type="text" value={userName} onChange={(e) => setUserName(e.target.value)} placeholder="e.g. Sarah Sanders" className="matte-input !py-2 text-xs" required autoFocus />
                 </div>
 
                 <div className="grid grid-cols-2 gap-2">
@@ -149,26 +179,29 @@ export function LoginView({
                   </div>
                 </div>
 
-                <button type="submit" className="app-btn app-btn-primary w-full py-2.5 text-xs font-bold shadow-md flex items-center justify-center gap-2">
-                  <UserCheck size={16} /> Complete Registration
+                <button type="submit" disabled={loading} className="app-btn app-btn-primary w-full py-2.5 text-xs font-bold shadow-md flex items-center justify-center gap-2">
+                  {loading ? 'Inserting into Supabase DB...' : <><UserCheck size={16} /> Save &amp; Register Account</>}
                 </button>
-              </div>
+              </form>
             ) : (
-              <div className="space-y-4">
-                <h2 className="text-base font-bold text-white tracking-tight">Sign In to SyncPulse</h2>
+              <form onSubmit={handleLoginSubmit} className="space-y-4">
+                <h2 className="text-base font-bold text-white tracking-tight">Sign In to Workspace</h2>
 
                 <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-wider mb-1 text-slate-400">Full Name or Username</label>
-                  <input type="text" value={userName} onChange={(e) => setUserName(e.target.value)} placeholder="e.g. Sarah Sanders" className="matte-input !py-2 text-xs" required autoFocus />
+                  <label className="block text-[10px] font-bold uppercase tracking-wider mb-1 text-slate-400">Username, Phone or Full Name</label>
+                  <input
+                    type="text"
+                    value={loginQuery}
+                    onChange={(e) => setLoginQuery(e.target.value)}
+                    placeholder="Enter registered username or phone..."
+                    className="matte-input !py-2.5 text-xs"
+                    required
+                    autoFocus
+                  />
                 </div>
 
-                <div>
-                  <label className="block text-[10px] font-bold uppercase tracking-wider mb-1 text-slate-400">Mobile Phone (Optional)</label>
-                  <input type="text" value={userPhone} onChange={(e) => setUserPhone(e.target.value)} placeholder="+1 555 1234" className="matte-input !py-2 text-xs" />
-                </div>
-
-                <button type="submit" className="app-btn app-btn-primary w-full py-2.5 text-xs font-bold shadow-md flex items-center justify-center gap-2">
-                  <AiSparkleIcon size={16} /> Sign In to Workspace
+                <button type="submit" disabled={loading} className="app-btn app-btn-primary w-full py-2.5 text-xs font-bold shadow-md flex items-center justify-center gap-2">
+                  {loading ? 'Authenticating with DB...' : <><AiSparkleIcon size={16} /> Sign In</>}
                 </button>
 
                 <div className="pt-2 text-center border-t border-white/5">
@@ -176,10 +209,10 @@ export function LoginView({
                     Don't have an account? <strong className="text-red-400 underline">Register here</strong>
                   </button>
                 </div>
-              </div>
+              </form>
             )}
           </div>
-        </form>
+        </div>
       </div>
     </div>
   );

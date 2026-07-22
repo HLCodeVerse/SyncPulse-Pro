@@ -785,6 +785,27 @@ export default function Home() {
     return chatMessages.filter((m) => m.roomId === rid && m.sender.id === c.id && m.status !== 'read').length;
   };
 
+  const handleLoginSuccess = (dbUser: any) => {
+    const userObj = {
+      id: dbUser.id,
+      name: dbUser.name || dbUser.full_name,
+      username: dbUser.username,
+      phone: dbUser.phone || dbUser.phone_number,
+      avatar: dbUser.avatar || dbUser.avatar_url || selectedAvatar,
+      bio: dbUser.bio || 'SyncPulse Pro User',
+      role: dbUser.role || 'user',
+      status: 'online'
+    };
+
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('syncpulse_session', JSON.stringify(userObj));
+    }
+
+    setRegisteredUser(userObj as any);
+    sigRef.current?.connect();
+    sigRef.current?.register(userObj as any);
+  };
+
   /* 1. Splash View */
   if (showSplash) {
     return <SplashView splashProgress={splashProgress} />;
@@ -800,7 +821,7 @@ export default function Home() {
         userRole={userRole} setUserRole={setUserRole}
         selectedAvatar={selectedAvatar} setSelectedAvatar={setSelectedAvatar}
         AVATAR_PRESETS={AVATAR_PRESETS}
-        handleRegister={handleRegister}
+        onLoginSuccess={handleLoginSuccess}
       />
     );
   }

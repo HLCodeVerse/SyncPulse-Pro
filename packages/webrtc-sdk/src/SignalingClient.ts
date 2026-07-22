@@ -264,14 +264,15 @@ export class SignalingClient {
     this.socket.emit('chat:send', { roomId, text });
   }
 
-  public sendDirectMessage(targetUserId: string, text: string, id?: string) {
-    this.socket.emit('chat:dm', { targetUserId, text, id });
+  public sendDirectMessage(targetUserId: string, text: string, id?: string, mediaUrl?: string) {
+    this.socket.emit('chat:dm', { targetUserId, text, id, mediaUrl });
     if (this.currentUser) {
       const msg: ChatMessage = {
         id: id || `msg_${Date.now()}`,
         roomId: [this.currentUser.id, targetUserId].sort().join('_chat_'),
         sender: { id: this.currentUser.id, name: this.currentUser.name, avatar: this.currentUser.avatar },
         text,
+        mediaUrl,
         timestamp: Date.now(),
         status: 'delivered'
       };

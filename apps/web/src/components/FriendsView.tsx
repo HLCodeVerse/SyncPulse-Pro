@@ -1,20 +1,23 @@
 'use client';
 
 import React from 'react';
-import { Users, UserPlus, MessageSquare, Video } from 'lucide-react';
+import { Users, UserPlus, MessageSquare, Video, UserX, ShieldAlert } from 'lucide-react';
 import { User } from '@webrtc/sdk';
 
 interface FriendsViewProps {
-  friendsTab: 'find' | 'friends' | 'requests';
-  setFriendsTab: (t: 'find' | 'friends' | 'requests') => void;
+  friendsTab: 'find' | 'friends' | 'requests' | 'blocked';
+  setFriendsTab: (t: 'find' | 'friends' | 'requests' | 'blocked') => void;
   others: User[];
   friendUserObjects: User[];
   friendRequests: User[];
   sentRequests: string[];
+  blockedUsers: User[];
   isFriend: (userId: string) => boolean;
   sendFriendRequest: (u: User) => void;
   acceptFriendRequest: (u: User) => void;
   rejectFriendRequest: (u: User) => void;
+  blockFriend: (u: User) => void;
+  unblockFriend: (u: User) => void;
   setSelectedContact: (u: User) => void;
   setScreen: (s: any) => void;
   startCall: (u: User, isVideo: boolean) => void;
@@ -22,20 +25,22 @@ interface FriendsViewProps {
 
 export function FriendsView({
   friendsTab, setFriendsTab,
-  others, friendUserObjects, friendRequests, sentRequests,
+  others, friendUserObjects, friendRequests, sentRequests, blockedUsers,
   isFriend, sendFriendRequest, acceptFriendRequest, rejectFriendRequest,
+  blockFriend, unblockFriend,
   setSelectedContact, setScreen, startCall
 }: FriendsViewProps) {
   return (
     <div className="flex-1 flex flex-col h-full overflow-hidden bg-[#0d0e12]">
       <div className="px-5 h-14 flex items-center justify-between bg-[#08090c] border-b border-white/10 shrink-0">
         <h2 className="text-sm font-bold text-white flex items-center gap-2"><Users size={16} className="text-red-400" /> Friends Network</h2>
-        <div className="flex gap-1.5">
+        <div className="flex gap-1.5 flex-wrap">
           <button onClick={() => setFriendsTab('find')} className={`px-3 py-1 rounded-lg text-xs font-medium ${friendsTab === 'find' ? 'bg-red-500 text-white' : 'text-slate-400'}`}>Online ({others.length})</button>
           <button onClick={() => setFriendsTab('friends')} className={`px-3 py-1 rounded-lg text-xs font-medium ${friendsTab === 'friends' ? 'bg-red-500 text-white' : 'text-slate-400'}`}>Friends ({friendUserObjects.length})</button>
           <button onClick={() => setFriendsTab('requests')} className={`relative px-3 py-1 rounded-lg text-xs font-medium ${friendsTab === 'requests' ? 'bg-red-500 text-white' : 'text-slate-400'}`}>
             Requests {friendRequests.length > 0 && <span className="ml-1 px-1.5 py-0.2 rounded-full text-[9px] bg-red-500 text-white">{friendRequests.length}</span>}
           </button>
+          <button onClick={() => setFriendsTab('blocked')} className={`px-3 py-1 rounded-lg text-xs font-medium ${friendsTab === 'blocked' ? 'bg-red-500 text-white' : 'text-slate-400'}`}>Blocked ({blockedUsers.length})</button>
         </div>
       </div>
 
@@ -73,23 +78,30 @@ export function FriendsView({
           )
         )}
 
-        {friendsTab === 'friends' && friendUserObjects.map((u) => (
-          <div key={u.id} className="flex items-center justify-between p-3 matte-card">
-            <div className="flex items-center gap-2.5">
-              <img src={u.avatar} alt="" className="w-8 h-8 rounded-full object-cover ring-1 ring-white/10" />
-              <div>
-                <h4 className="text-xs font-bold text-white">{u.name}</h4>
-                <span className={`text-[10px] ${u.status === 'online' ? 'text-emerald-400' : 'text-slate-500'}`}>
-                  {u.status === 'online' ? '● Online' : 'Offline'}
-                </span>
+        {friendsTab === 'friends' && (
+          friendUserObjects.length === 0 ? (
+            <div className="matte-card p-8 text-center text-xs text-slate-400">No friends added yet</div>
+          ) : (
+            friendUserObjects.map((u) => (
+              <div key={u.id} className="flex items-center justify-between p-3 matte-card">
+                <div className="flex items-center gap-2.5">
+                  <img src={u.avatar} alt="" className="w-8 h-8 rounded-full object-cover ring-1 ring-white/10" />
+                  <div>
+                    <h4 className="text-xs font-bold text-white">{u.name}</h4>
+                    <span className={`text-[10px] ${u.status === 'online' ? 'text-emerald-400' : 'text-slate-500'}`}>
+                      {u.status === 'online' ? '● Online' : 'Offline'}
+                    </span>
+                  </div>
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={() => { setSelectedContact(u); setScreen('chats'); }} className="p-2 rounded-lg border border-white/10 text-slate-300" title="Chat"><MessageSquare size={14} /></button>
+                  <button onClick={() => startCall(u, true)} className="p-2 rounded-lg bg-red-500 text-white" title="Video Call"><Video size={14} /></button>
+                  <button onClick={() => blockFriend(u)} className="p-2 rounded-lg bg-red-950/40 text-red-400 border border-red-500/20 hover:bg-red-950/70" title="Block Friend"><ShieldAlert size={14} /></button>
+                </div>
               </div>
-            </div>
-            <div className="flex gap-2">
-              <button onClick={() => { setSelectedContact(u); setScreen('chats'); }} className="p-2 rounded-lg border border-white/10 text-slate-300"><MessageSquare size={14} /></button>
-              <button onClick={() => startCall(u, true)} className="p-2 rounded-lg bg-red-500 text-white"><Video size={14} /></button>
-            </div>
-          </div>
-        ))}
+            ))
+          )
+        )}
 
         {friendsTab === 'requests' && (
           friendRequests.length === 0 ? (
@@ -105,6 +117,24 @@ export function FriendsView({
                   <button onClick={() => rejectFriendRequest(u)} className="px-3 py-1 rounded-lg text-xs bg-red-500/20 text-red-400">Decline</button>
                   <button onClick={() => acceptFriendRequest(u)} className="app-btn app-btn-primary px-3 py-1 text-xs">Accept</button>
                 </div>
+              </div>
+            ))
+          )
+        )}
+
+        {friendsTab === 'blocked' && (
+          blockedUsers.length === 0 ? (
+            <div className="matte-card p-8 text-center text-xs text-slate-400">No blocked users</div>
+          ) : (
+            blockedUsers.map((u) => (
+              <div key={u.id} className="flex items-center justify-between p-3 matte-card animate-fade-in">
+                <div className="flex items-center gap-2.5">
+                  <img src={u.avatar} alt="" className="w-8 h-8 rounded-full object-cover ring-1 ring-white/10" />
+                  <span className="text-xs font-bold text-white">{u.name}</span>
+                </div>
+                <button onClick={() => unblockFriend(u)} className="px-3.5 py-1.5 rounded-lg text-xs bg-emerald-500/20 text-emerald-400 font-semibold hover:bg-emerald-500/30 border border-emerald-500/20">
+                  Unblock
+                </button>
               </div>
             ))
           )

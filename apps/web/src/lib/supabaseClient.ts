@@ -67,7 +67,7 @@ export async function saveFriendshipToDb(userId1: string, userId2: string, statu
   } catch (e) {}
 }
 
-export async function saveMessageToDb(msg: { id: string; roomId: string; senderId: string; text: string }) {
+export async function saveMessageToDb(msg: { id: string; roomId: string; senderId: string; text: string; mediaUrl?: string }) {
   try {
     await fetch('/api/messages', {
       method: 'POST',

@@ -19,7 +19,7 @@ import {
 import {
   Phone, Video, PhoneOff, Mic, MicOff, VideoOff, Monitor, MessageSquare,
   Search, Send, CheckCheck, Check, ArrowLeft, Settings, LogOut, Users, Zap,
-  X, Sparkles, Hash, Edit2, Bot, Wand2, Globe2, ShieldCheck,
+  X, Sparkles, Hash, Edit2, Bot, Wand2, Globe2, ShieldCheck, ShieldAlert,
   Pin, File, PhoneCall, User as UserIcon, UserPlus, UserCheck, UserSearch,
   Activity, Plus, Camera, Smile, Paperclip, Lock, Radio, Trash2, Reply, Bell
 } from 'lucide-react';
@@ -30,7 +30,9 @@ import {
   summarizeChatHistory,
   generateMeetingNotes,
   generateUserBio,
-  translateText
+  translateText,
+  askGemini,
+  rephraseText
 } from '../lib/aiService';
 import {
   syncUserIdentity,
@@ -172,7 +174,7 @@ export default function Home() {
   const [friendProfiles, setFriendProfiles] = useState<Record<string, User>>({});
   const [friendRequests, setFriendRequests] = useState<User[]>([]);
   const [sentRequests, setSentRequests] = useState<string[]>([]);
-  const [friendsTab, setFriendsTab] = useState<'find' | 'friends' | 'requests'>('find');
+  const [friendsTab, setFriendsTab] = useState<'find' | 'friends' | 'requests' | 'blocked'>('find');
 
   // Admin Dashboard State
   const [adminTab, setAdminTab] = useState<'overview' | 'users' | 'messages' | 'rooms' | 'system'>('overview');
@@ -205,7 +207,6 @@ export default function Home() {
   const [incomingCall, setIncomingCall] = useState<{ roomId: string; caller: User; isVideo: boolean; callType: CallType } | null>(null);
   const [outgoingCall, setOutgoingCall] = useState<{ target: User; isVideo: boolean; roomId: string } | null>(null);
   const [busyNotice, setBusyNotice] = useState<string | null>(null);
-
   // Chat & AI Context State
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState('');
@@ -223,6 +224,240 @@ export default function Home() {
 
   const [aiPolishInput, setAiPolishInput] = useState('');
   const [aiPolishOutput, setAiPolishOutput] = useState('');
+
+  // Voice message & camera recording states
+  const [isRecordingVoice, setIsRecordingVoice] = useState(false);
+  const [voiceRecordingTime, setVoiceRecordingTime] = useState(0);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const recordingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  const [showAttachmentMenu, setShowAttachmentMenu] = useState(false);
+  const [showCameraModal, setShowCameraModal] = useState(false);
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  const cameraVideoRef = useRef<HTMLVideoElement | null>(null);
+
+  const [blockedUsers, setBlockedUsers] = useState<string[]>([]);
+  const [blockedUserObjects, setBlockedUserObjects] = useState<User[]>([]);
+
+  const startVoiceRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorderRef.current = mediaRecorder;
+      audioChunksRef.current = [];
+
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        const reader = new FileReader();
+        reader.readAsDataURL(audioBlob);
+        reader.onloadend = () => {
+          const base64Audio = reader.result as string;
+          sendMediaMessage("🎤 Voice Message", base64Audio);
+        };
+        stream.getTracks().forEach(track => track.stop());
+      };
+
+      mediaRecorder.start();
+      setIsRecordingVoice(true);
+      setVoiceRecordingTime(0);
+      recordingIntervalRef.current = setInterval(() => {
+        setVoiceRecordingTime(prev => prev + 1);
+      }, 1000);
+    } catch (err) {
+      alert("Microphone access denied or error starting recording.");
+    }
+  };
+
+  const stopVoiceRecording = (shouldSend = true) => {
+    if (recordingIntervalRef.current) {
+      clearInterval(recordingIntervalRef.current);
+    }
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      if (!shouldSend) {
+        mediaRecorderRef.current.onstop = () => {
+          mediaRecorderRef.current = null;
+        };
+      }
+      mediaRecorderRef.current.stop();
+    }
+    setIsRecordingVoice(false);
+  };
+
+  const startCamera = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { width: 640, height: 480 } });
+      setCameraStream(stream);
+      setShowCameraModal(true);
+      setTimeout(() => {
+        if (cameraVideoRef.current) {
+          cameraVideoRef.current.srcObject = stream;
+        }
+      }, 200);
+    } catch (e) {
+      alert("Failed to access camera.");
+    }
+  };
+
+  const stopCamera = () => {
+    if (cameraStream) {
+      cameraStream.getTracks().forEach(track => track.stop());
+    }
+    setCameraStream(null);
+    setShowCameraModal(false);
+  };
+
+  const capturePhoto = () => {
+    if (cameraVideoRef.current) {
+      const video = cameraVideoRef.current;
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth || 640;
+      canvas.height = video.videoHeight || 480;
+      const ctx = canvas.getContext('2d');
+      if (ctx) {
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        const dataUrl = canvas.toDataURL('image/jpeg');
+        sendMediaMessage("📷 Camera Photo", dataUrl);
+      }
+    }
+    stopCamera();
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onloadend = () => {
+        const base64Content = reader.result as string;
+        sendMediaMessage(`📎 File Attachment: ${file.name}`, base64Content);
+      };
+    }
+  };
+
+  const sendMediaMessage = async (text: string, mediaUrl: string) => {
+    if (!selectedContact || !registeredUser) return;
+    const isAi = selectedContact.id === AI_BOT_USER.id;
+    if (isAi) {
+      alert("PulseAI Assistant doesn't support file/media attachments directly.");
+      return;
+    }
+    const roomId = [registeredUser.id, selectedContact.id].sort().join('_chat_');
+    const msgId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+    const msg: ChatMessage = {
+      id: msgId,
+      roomId,
+      sender: { id: registeredUser.id, name: registeredUser.name, avatar: registeredUser.avatar },
+      text,
+      mediaUrl,
+      timestamp: Date.now(),
+      status: 'sent'
+    };
+
+    setChatMessages((prev) => [...prev, msg]);
+    saveMessageToDb({ id: msgId, roomId, senderId: registeredUser.id, text, mediaUrl });
+    sigRef.current?.sendDirectMessage(selectedContact.id, text, msgId, mediaUrl);
+  };
+
+  const blockFriend = async (targetUser: User) => {
+    if (!registeredUser) return;
+    try {
+      await fetch('/api/friendships', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'block', senderId: registeredUser.id, targetId: targetUser.id })
+      });
+      setFriends(prev => prev.filter(id => id !== targetUser.id));
+      setBlockedUsers(prev => Array.from(new Set([...prev, targetUser.id])));
+      setBlockedUserObjects(prev => [...prev.filter(x => x.id !== targetUser.id), targetUser]);
+      if (selectedContact?.id === targetUser.id) {
+        setSelectedContact(null);
+      }
+      setBusyNotice(`Blocked ${targetUser.name}`);
+      setTimeout(() => setBusyNotice(null), 3000);
+    } catch (e) {}
+  };
+
+  const unblockFriend = async (targetUser: User) => {
+    if (!registeredUser) return;
+    try {
+      await fetch('/api/friendships', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'unblock', senderId: registeredUser.id, targetId: targetUser.id })
+      });
+      setBlockedUsers(prev => prev.filter(id => id !== targetUser.id));
+      setBlockedUserObjects(prev => prev.filter(u => u.id !== targetUser.id));
+      setBusyNotice(`Unblocked ${targetUser.name}`);
+      setTimeout(() => setBusyNotice(null), 3000);
+    } catch (e) {}
+  };
+
+  const handleExportChat = () => {
+    if (!selectedContact || !registeredUser) return;
+    const dmId = selectedContact.id === AI_BOT_USER.id ? 'pulse_ai_bot' : [registeredUser.id, selectedContact.id].sort().join('_chat_');
+    const msgs = chatMessages.filter(m => m.roomId === dmId);
+    
+    let exportText = `=========================================\n`;
+    exportText += `SyncPulse Pro - Chat Transcript Export\n`;
+    exportText += `Participants: ${registeredUser.name} & ${selectedContact.name}\n`;
+    exportText += `Exported At: ${new Date().toLocaleString()}\n`;
+    exportText += `=========================================\n\n`;
+
+    msgs.forEach(m => {
+      const time = new Date(m.timestamp).toLocaleString();
+      const deleted = m.isDeleted ? ' [DELETED]' : '';
+      const edited = m.isEdited ? ' (edited)' : '';
+      const attachment = m.mediaUrl ? ` [Attachment: ${m.mediaUrl.startsWith('data:audio') ? 'Voice Note' : (m.mediaUrl.startsWith('data:image') ? 'Image' : 'File')}]` : '';
+      exportText += `[${time}] ${m.sender.name}: ${m.text}${edited}${deleted}${attachment}\n`;
+    });
+
+    const blob = new Blob([exportText], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `chat_export_${selectedContact.username || 'user'}_${Date.now()}.txt`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleAiTranslate = async (msg: ChatMessage) => {
+    setIsAiThinking(true);
+    try {
+      const isEnglish = /^[A-Za-z0-9\s,.:;'"?!()-]+$/.test(msg.text);
+      const targetLang = isEnglish ? 'Spanish' : 'English';
+      const translation = await translateText(msg.text, targetLang);
+      setChatMessages(prev => prev.map(m => m.id === msg.id ? { ...m, aiAnnotation: `Translated to ${targetLang}:\n${translation}` } : m));
+    } catch (e) {}
+    setIsAiThinking(false);
+  };
+
+  const handleAiRephrase = async (msg: ChatMessage) => {
+    setIsAiThinking(true);
+    try {
+      const rephrased = await rephraseText(msg.text, 'professional');
+      setChatMessages(prev => prev.map(m => m.id === msg.id ? { ...m, aiAnnotation: `Rephrased (Professional):\n${rephrased}` } : m));
+    } catch (e) {}
+    setIsAiThinking(false);
+  };
+
+  const handleAiSummarizeMessage = async (msg: ChatMessage) => {
+    setIsAiThinking(true);
+    try {
+      const explanation = await askGemini(`Explain or clarify this message in context: "${msg.text}"`);
+      setChatMessages(prev => prev.map(m => m.id === msg.id ? { ...m, aiAnnotation: `AI Context & Explanation:\n${explanation}` } : m));
+    } catch (e) {}
+    setIsAiThinking(false);
+  };
 
   const sigRef = useRef<SignalingClient | null>(null);
   const pmRef = useRef<PeerConnectionManager | null>(null);
@@ -290,6 +525,8 @@ export default function Home() {
             text: m.text,
             timestamp: new Date(m.created_at).getTime(),
             status: 'read',
+            reactions: m.reactions,
+            mediaUrl: m.media_url,
             isEdited: m.is_edited,
             isDeleted: m.is_deleted
           }));
@@ -326,6 +563,11 @@ export default function Home() {
       onNetworkQualityReport: (_, st) => setNetworkQuality({ quality: st.quality, rttMs: st.rttMs, bitrateKbps: st.bitrateKbps }),
     });
     pmRef.current = pm;
+
+    if (registeredUser) {
+      sig.connect();
+      sig.register(registeredUser as any);
+    }
 
     sig.on('registered', (u) => setRegisteredUser(u as any));
     sig.on('presence:update', (u) => setOnlineUsers(u));
@@ -735,6 +977,15 @@ export default function Home() {
           if (fData.pendingOutgoingRequests) {
             setSentRequests(fData.pendingOutgoingRequests);
           }
+          if (fData.blockedUsers) {
+            setBlockedUsers(fData.blockedUsers.map((f: any) => f.id));
+            setBlockedUserObjects(fData.blockedUsers.map((f: any) => ({
+              id: f.id,
+              name: f.name,
+              avatar: f.avatar,
+              status: f.status
+            })));
+          }
         }
       } catch (e) {}
     };
@@ -751,7 +1002,7 @@ export default function Home() {
   }, [registeredUser]);
 
   /* Reactive Status Fusion with Signaling Presence */
-  const dbUsersExcludingSelf = allDbUsers.filter((u) => u.id !== registeredUser?.id);
+  const dbUsersExcludingSelf = allDbUsers.filter((u) => u.id !== registeredUser?.id && !blockedUsers.includes(u.id));
   const mergedUsers = dbUsersExcludingSelf.map(u => {
     const isOnlineViaSig = onlineUsers.some(o => o.id === u.id);
     return {
@@ -833,7 +1084,31 @@ export default function Home() {
   /* 3. Main App Workspace */
   return (
     <div className="fixed inset-0 w-screen h-screen flex flex-col md:flex-row overflow-hidden bg-black">
-      <input type="file" ref={fileInputRef} onChange={() => {}} className="hidden" />
+      <input type="file" ref={fileInputRef} onChange={handleFileChange} className="hidden" />
+
+      {showCameraModal && (
+        <div className="fixed inset-0 bg-black/90 backdrop-blur-md z-50 flex items-center justify-center p-4">
+          <div className="matte-card max-w-sm w-full p-5 space-y-4 border border-white/10 flex flex-col items-center">
+            <div className="w-full flex items-center justify-between">
+              <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                <Camera size={16} className="text-red-400" /> Camera Photo Capture
+              </h3>
+              <button onClick={stopCamera} className="text-slate-400 hover:text-white">
+                <X size={16} />
+              </button>
+            </div>
+            
+            <div className="w-full aspect-video bg-black rounded-xl overflow-hidden relative ring-1 ring-white/10">
+              <video ref={cameraVideoRef} autoPlay playsInline muted className="w-full h-full object-cover" />
+            </div>
+
+            <div className="flex gap-2.5 w-full">
+              <button onClick={stopCamera} className="flex-1 px-4 py-2 rounded-xl border border-white/10 text-xs font-semibold text-slate-300 hover:bg-white/5 transition-colors">Cancel</button>
+              <button onClick={capturePhoto} className="flex-1 app-btn app-btn-primary px-4 py-2 text-xs font-bold flex items-center justify-center gap-1.5"><Camera size={13} /> Take Snap</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {incomingCall && (
         <CallModal
@@ -1040,6 +1315,7 @@ export default function Home() {
 
                     <div className="flex items-center gap-2">
                       <button onClick={handleSummarizeChat} className="p-2 text-slate-400 hover:text-white" title="AI Summarize"><Bot size={16} /></button>
+                      <button onClick={handleExportChat} className="p-2 text-slate-400 hover:text-white" title="Export Chat"><File size={16} /></button>
                       {selectedContact.id !== AI_BOT_USER.id && (
                         <>
                           <button onClick={() => startCall(selectedContact, false)} className="p-2 text-slate-400 hover:text-emerald-400"><Phone size={16} /></button>
@@ -1065,17 +1341,50 @@ export default function Home() {
                                 </button>
                               ))}
                               <button onClick={() => setReplyingTo(msg)} className="p-0.5 text-slate-400 hover:text-white" title="Reply"><Reply size={12} /></button>
+                              <button onClick={() => handleAiTranslate(msg)} className="p-0.5 text-red-400 hover:text-red-300" title="Translate (AI)"><Globe2 size={12} /></button>
+                              <button onClick={() => handleAiRephrase(msg)} className="p-0.5 text-red-400 hover:text-red-300" title="Rephrase (AI)"><Wand2 size={12} /></button>
+                              <button onClick={() => handleAiSummarizeMessage(msg)} className="p-0.5 text-red-400 hover:text-red-300" title="AI Explain"><Sparkles size={12} /></button>
                               {isMe && (
                                 <button onClick={() => handleDeleteMessage(msg.id)} className="p-0.5 text-slate-400 hover:text-red-400" title="Delete"><Trash2 size={12} /></button>
                               )}
                             </div>
                           )}
 
-                          {emojiOnly ? (
+                          {emojiOnly && !msg.mediaUrl ? (
                             <div className="text-4xl py-1">{msg.text}</div>
                           ) : (
                             <div className={`max-w-[80%] md:max-w-[65%] px-3.5 py-2 text-xs leading-relaxed ${isMe ? 'bg-red-500 text-white rounded-2xl rounded-tr-xs' : 'matte-card text-white rounded-2xl rounded-tl-xs'}`}>
-                              <p className={`break-words whitespace-pre-line ${msg.isDeleted ? 'italic text-slate-400' : ''}`}>{msg.text}</p>
+                              {msg.mediaUrl && (
+                                <div className="mb-2 overflow-hidden rounded-xl">
+                                  {msg.mediaUrl.startsWith('data:image/') || msg.mediaUrl.match(/\.(jpeg|jpg|gif|png|webp)/i) ? (
+                                    <img src={msg.mediaUrl} alt="Attachment" className="max-w-full h-auto max-h-60 rounded-xl object-cover hover:scale-105 transition-transform duration-300 ring-1 ring-white/10" />
+                                  ) : msg.mediaUrl.startsWith('data:audio/') || msg.mediaUrl.match(/\.(webm|mp3|ogg|wav|m4a)/i) ? (
+                                    <div className="flex flex-col gap-1 p-2 rounded-xl bg-black/40 border border-white/5 min-w-[200px]">
+                                      <span className="text-[10px] text-red-400 font-bold block mb-1">🎤 Voice Note</span>
+                                      <audio src={msg.mediaUrl} controls className="w-full h-8 accent-red-500 outline-none" />
+                                    </div>
+                                  ) : (
+                                    <a href={msg.mediaUrl} download={`attachment_${msg.id}`} className="flex items-center gap-2 p-2.5 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 transition-colors">
+                                      <Paperclip size={14} className="text-red-400" />
+                                      <div className="text-left min-w-0">
+                                        <p className="text-[11px] font-bold text-white truncate">{msg.text || 'Download File'}</p>
+                                        <span className="text-[9px] text-slate-500 font-medium">Click to download</span>
+                                      </div>
+                                    </a>
+                                  )}
+                                </div>
+                              )}
+
+                              {(!msg.mediaUrl || msg.text !== "🎤 Voice Message" && msg.text !== "📷 Camera Photo") && (
+                                <p className={`break-words whitespace-pre-line ${msg.isDeleted ? 'italic text-slate-400' : ''}`}>{msg.text}</p>
+                              )}
+
+                              {msg.aiAnnotation && (
+                                <div className="mt-1.5 pt-1.5 border-t border-white/10 text-[10px] text-red-300 flex flex-col gap-0.5">
+                                  <span className="font-bold flex items-center gap-1"><Sparkles size={10} /> AI Sparkle Help:</span>
+                                  <p className="whitespace-pre-line">{msg.aiAnnotation}</p>
+                                </div>
+                              )}
                               
                               {msg.reactions && msg.reactions.length > 0 && (
                                 <div className="flex gap-1 mt-1 flex-wrap">
@@ -1109,12 +1418,49 @@ export default function Home() {
                   </div>
 
                   {/* Input Bar */}
-                  <form onSubmit={(e) => { e.preventDefault(); handleSendMessage(); }} className="px-3 py-2.5 flex items-center gap-2 bg-[#08090c] border-t border-white/10">
-                    <button type="button" onClick={() => setShowAiMenu(!showAiMenu)} className="p-1.5 text-red-400 hover:scale-110 transition-transform">
-                      <AiSparkleIcon size={18} />
-                    </button>
-                    <input type="text" value={inputText} onChange={(e) => setInputText(e.target.value)} placeholder="Type a message..." className="matte-input flex-1 !py-2 text-xs" />
-                    <button type="submit" disabled={!inputText.trim()} className="app-btn app-btn-primary p-2 rounded-xl disabled:opacity-30"><Send size={15} /></button>
+                  <form onSubmit={(e) => { e.preventDefault(); handleSendMessage(); }} className="px-3 py-2.5 flex items-center gap-2 bg-[#08090c] border-t border-white/10 relative">
+                    {isRecordingVoice ? (
+                      <div className="flex-1 flex items-center justify-between bg-red-950/20 border border-red-500/20 px-3 py-1.5 rounded-xl gap-3">
+                        <div className="flex items-center gap-2 text-xs text-red-400 font-semibold">
+                          <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
+                          <span>Voice Recording... ({Math.floor(voiceRecordingTime / 60)}:{(voiceRecordingTime % 60).toString().padStart(2, '0')})</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button type="button" onClick={() => stopVoiceRecording(false)} className="p-1 text-slate-400 hover:text-red-400" title="Cancel"><Trash2 size={16} /></button>
+                          <button type="button" onClick={() => stopVoiceRecording(true)} className="p-1 text-emerald-400 hover:scale-110" title="Send Voice Note"><Send size={16} /></button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <button type="button" onClick={() => setShowAiMenu(!showAiMenu)} className="p-1.5 text-red-400 hover:scale-110 transition-transform" title="AI Helper Tools">
+                          <AiSparkleIcon size={18} />
+                        </button>
+                        
+                        {/* Attachment Trigger Menu */}
+                        <div className="relative">
+                          <button type="button" onClick={() => setShowAttachmentMenu(!showAttachmentMenu)} className={`p-1.5 text-slate-400 hover:text-white transition-colors ${showAttachmentMenu ? 'text-red-400' : ''}`} title="Attach File/Image">
+                            <Paperclip size={18} />
+                          </button>
+                          {showAttachmentMenu && (
+                            <div className="absolute bottom-10 left-0 z-50 matte-card border border-white/10 p-2 w-36 shadow-2xl flex flex-col gap-1 anim-slide-up">
+                              <button type="button" onClick={() => { setShowAttachmentMenu(false); fileInputRef.current?.click(); }} className="w-full text-left px-2 py-1.5 text-[10px] text-white hover:bg-white/5 rounded-lg flex items-center gap-1.5 font-bold">
+                                <File size={12} className="text-red-400" /> Upload File
+                              </button>
+                              <button type="button" onClick={() => { setShowAttachmentMenu(false); startCamera(); }} className="w-full text-left px-2 py-1.5 text-[10px] text-white hover:bg-white/5 rounded-lg flex items-center gap-1.5 font-bold">
+                                <Camera size={12} className="text-red-400" /> Camera Snap
+                              </button>
+                            </div>
+                          )}
+                        </div>
+
+                        <button type="button" onClick={startVoiceRecording} className="p-1.5 text-slate-400 hover:text-red-400 transition-colors" title="Record Voice Note">
+                          <Mic size={18} />
+                        </button>
+
+                        <input type="text" value={inputText} onChange={(e) => setInputText(e.target.value)} placeholder="Type a message..." className="matte-input flex-1 !py-2 text-xs" />
+                        <button type="submit" disabled={!inputText.trim()} className="app-btn app-btn-primary p-2 rounded-xl disabled:opacity-30"><Send size={15} /></button>
+                      </>
+                    )}
                   </form>
                 </div>
               ) : (
@@ -1143,8 +1489,10 @@ export default function Home() {
               friendsTab={friendsTab} setFriendsTab={setFriendsTab}
               others={sortedDbUsers} friendUserObjects={acceptedFriendObjects}
               friendRequests={friendRequests} sentRequests={sentRequests}
+              blockedUsers={blockedUserObjects}
               isFriend={isFriend} sendFriendRequest={sendFriendRequest}
               acceptFriendRequest={acceptFriendRequest} rejectFriendRequest={rejectFriendRequest}
+              blockFriend={blockFriend} unblockFriend={unblockFriend}
               setSelectedContact={setSelectedContact} setScreen={setScreen}
               startCall={startCall}
             />

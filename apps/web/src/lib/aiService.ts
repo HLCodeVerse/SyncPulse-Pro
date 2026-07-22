@@ -1,4 +1,4 @@
-const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY || '';
+const apiKey = 'AIzaSyD1uwO-OvXHVeOo7EdWfnIMncSia8fWsPM';
 
 export async function askGeminiWithThreadContext(
   userPrompt: string,

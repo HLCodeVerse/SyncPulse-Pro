@@ -2,6 +2,7 @@ export interface User {
   id: string;
   name: string;
   avatar?: string;
+  username?: string;
   status: 'online' | 'offline' | 'in-call';
   lastSeen?: string;
 }
@@ -46,6 +47,8 @@ export interface ChatMessage {
   timestamp: number;
   status?: 'sent' | 'delivered' | 'read';
   reactions?: MessageReaction[];
+  mediaUrl?: string;
+  aiAnnotation?: string;
   isEdited?: boolean;
   isDeleted?: boolean;
   editedAt?: number;
@@ -83,7 +86,7 @@ export interface ClientToServerEvents {
   'signal:ice-candidate': (payload: { targetSocketId: string; candidate: RTCIceCandidateInit }) => void;
   'media:toggle': (payload: { roomId: string; mediaState: Partial<MediaState> }) => void;
   'chat:send': (payload: { roomId: string; text: string }) => void;
-  'chat:dm': (payload: { targetUserId: string; text: string; id?: string }) => void;
+  'chat:dm': (payload: { targetUserId: string; text: string; id?: string; mediaUrl?: string }) => void;
   'chat:react': (payload: { messageId: string; targetUserId: string; emoji: string }) => void;
   'chat:edit': (payload: { messageId: string; targetUserId: string; newText: string }) => void;
   'chat:read': (payload: { targetUserId: string; messageIds: string[] }) => void;

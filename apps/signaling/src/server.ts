@@ -171,7 +171,7 @@ io.on('connection', (socket) => {
   });
 
   // Direct Message (DM) — routes to target user socket without requiring room:join
-  socket.on('chat:dm', ({ targetUserId, text, id }) => {
+  socket.on('chat:dm', ({ targetUserId, text, id, mediaUrl }) => {
     const sender = socketUserMap.get(socket.id);
     if (!sender) return;
 
@@ -186,6 +186,7 @@ io.on('connection', (socket) => {
         avatar: sender.avatar
       },
       text,
+      mediaUrl,
       timestamp: Date.now()
     };
 

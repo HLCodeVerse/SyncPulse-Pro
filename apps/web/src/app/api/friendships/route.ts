@@ -27,6 +27,7 @@ export async function GET(req: NextRequest) {
     const acceptedFriends: any[] = [];
     const pendingIncomingRequests: any[] = [];
     const pendingOutgoingRequests: string[] = [];
+    const blockedUsers: any[] = [];
 
     rows.forEach((r: any) => {
       const isUser1 = r.user_id_1 === userId;
@@ -47,6 +48,10 @@ export async function GET(req: NextRequest) {
         } else {
           pendingOutgoingRequests.push(otherId);
         }
+      } else if (r.status === 'blocked') {
+        if (r.action_user_id === userId) {
+          blockedUsers.push(otherUser);
+        }
       }
     });
 
@@ -54,7 +59,8 @@ export async function GET(req: NextRequest) {
       success: true,
       acceptedFriends,
       pendingIncomingRequests,
-      pendingOutgoingRequests
+      pendingOutgoingRequests,
+      blockedUsers
     });
   } catch (err: any) {
     console.error('Friendships GET Error:', err);
@@ -73,7 +79,22 @@ export async function POST(req: NextRequest) {
     }
 
     const [u1, u2] = [senderId, targetId].sort();
-    const status = action === 'send' ? 'pending' : (action === 'accept' ? 'accepted' : 'rejected');
+    let status;
+    if (action === 'send') {
+      status = 'pending';
+    } else if (action === 'accept') {
+      status = 'accepted';
+    } else if (action === 'block') {
+      status = 'blocked';
+    } else if (action === 'unblock') {
+      await queryDb(`
+        DELETE FROM public.friendships
+        WHERE (user_id_1 = $1 AND user_id_2 = $2) OR (user_id_1 = $2 AND user_id_2 = $1);
+      `, [senderId, targetId]);
+      return NextResponse.json({ success: true, status: 'none' });
+    } else {
+      status = 'rejected';
+    }
 
     await queryDb(`
       INSERT INTO public.friendships (user_id_1, user_id_2, status, action_user_id, updated_at)

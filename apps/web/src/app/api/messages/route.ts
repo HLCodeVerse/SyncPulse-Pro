@@ -16,14 +16,14 @@ export async function GET(req: NextRequest) {
     let rows = [];
     if (roomId === 'all') {
       rows = await queryDb(`
-        SELECT id, room_id, sender_id, text, is_edited, is_deleted, created_at
+        SELECT id, room_id, sender_id, text, media_url, is_edited, is_deleted, reactions, created_at
         FROM public.messages
         ORDER BY created_at DESC
         LIMIT 100;
       `);
     } else {
       rows = await queryDb(`
-        SELECT id, room_id, sender_id, text, is_edited, is_deleted, created_at
+        SELECT id, room_id, sender_id, text, media_url, is_edited, is_deleted, reactions, created_at
         FROM public.messages
         WHERE room_id = $1
         ORDER BY created_at ASC;
@@ -41,17 +41,27 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { id, roomId, senderId, text } = body;
+    const { id, roomId, senderId, text, mediaUrl, reactions } = body;
 
     if (!id || !roomId || !senderId || !text) {
       return NextResponse.json({ success: false, error: 'Missing parameters' }, { status: 400 });
     }
 
     await queryDb(`
-      INSERT INTO public.messages (id, room_id, sender_id, text, created_at)
-      VALUES ($1, $2, $3, $4, NOW())
-      ON CONFLICT (id) DO UPDATE SET text = EXCLUDED.text;
-    `, [id, roomId, senderId, text]);
+      INSERT INTO public.messages (id, room_id, sender_id, text, media_url, reactions, created_at)
+      VALUES ($1, $2, $3, $4, $5, $6, NOW())
+      ON CONFLICT (id) DO UPDATE SET 
+        text = EXCLUDED.text,
+        is_edited = CASE WHEN public.messages.text != EXCLUDED.text THEN true ELSE public.messages.is_edited END,
+        reactions = COALESCE(EXCLUDED.reactions, public.messages.reactions);
+    `, [
+      id,
+      roomId,
+      senderId,
+      text,
+      mediaUrl || null,
+      reactions ? JSON.stringify(reactions) : null
+    ]);
 
     return NextResponse.json({ success: true });
   } catch (err: any) {

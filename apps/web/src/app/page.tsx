@@ -22,7 +22,7 @@ import {
   Search, Send, CheckCheck, Check, ArrowLeft, Settings, LogOut, Users, Zap,
   X, Sparkles, Hash, Edit2, Bot, Wand2, Globe2, ShieldCheck,
   Pin, File, PhoneCall, User as UserIcon, UserPlus, UserCheck, UserSearch,
-  Activity, RefreshCw
+  Activity, Plus, Camera, Smile, Paperclip
 } from 'lucide-react';
 import { askGemini, generateSmartReplies, summarizeChatHistory, rephraseText, translateText } from '../lib/aiService';
 
@@ -44,11 +44,17 @@ const AI_BOT_USER: User = {
   lastSeen: 'Active Now'
 };
 
-const THEMES: { key: ThemeKey; label: string; dot: string }[] = [
-  { key: 'slate', label: 'Slate Dark', dot: '#3b82f6' },
-  { key: 'indigo', label: 'Indigo Night', dot: '#6366f1' },
-  { key: 'mineral', label: 'Mineral Green', dot: '#10b981' },
-  { key: 'graphite', label: 'Graphite Dark', dot: '#e4e4e7' },
+/* 🎨 8 Themes From Image 2 + Default Image 1 Neumorphic Coral */
+const THEMES: { key: string; label: string; dot: string; grad: string }[] = [
+  { key: 'coral-dark', label: 'Coral Neumorphic (Image 1)', dot: '#ff4747', grad: 'linear-gradient(135deg, #1e2129, #232731)' },
+  { key: 'cyan-mint', label: 'Cyan Mint', dot: '#007cbe', grad: 'linear-gradient(135deg, #007cbe, #fff7ae)' },
+  { key: 'coral-sunset', label: 'Coral Sunset', dot: '#e57a44', grad: 'linear-gradient(135deg, #e57a44, #251351)' },
+  { key: 'pastel-lavender', label: 'Pastel Lavender', dot: '#a882dd', grad: 'linear-gradient(135deg, #f1fec6, #a882dd)' },
+  { key: 'rose-mint', label: 'Rose Mint', dot: '#db5375', grad: 'linear-gradient(135deg, #db5375, #b3ffb3)' },
+  { key: 'ocean-blue', label: 'Ocean Blue', dot: '#02c3bd', grad: 'linear-gradient(135deg, #02c3bd, #4e148c)' },
+  { key: 'lime-gold', label: 'Lime Gold', dot: '#f4d35e', grad: 'linear-gradient(135deg, #629460, #f4d35e)' },
+  { key: 'forest-sage', label: 'Forest Sage', dot: '#b0db43', grad: 'linear-gradient(135deg, #414288, #b0db43)' },
+  { key: 'peach-pink', label: 'Peach Pink', dot: '#ec368d', grad: 'linear-gradient(135deg, #ffc145, #ec368d)' },
 ];
 
 const EMOJI_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏', '🚀', '🔥'];
@@ -95,10 +101,10 @@ function playSound(type: 'message' | 'ring' | 'dial') {
 export default function Home() {
   // Splash & Session state
   const [showSplash, setShowSplash] = useState(true);
-  const [splashProgress, setSplashProgress] = useState(15);
+  const [splashProgress, setSplashProgress] = useState(20);
   const [userName, setUserName] = useState('');
   const [selectedAvatar, setSelectedAvatar] = useState(AVATAR_PRESETS[0]);
-  const [userBio, setUserBio] = useState('Senior WebRTC & Full-Stack Engineer.');
+  const [userBio, setUserBio] = useState('Senior WebRTC & UI Architect.');
   const [registeredUser, setRegisteredUser] = useState<User | null>(null);
   const [onlineUsers, setOnlineUsers] = useState<User[]>([]);
 
@@ -113,9 +119,9 @@ export default function Home() {
   const [sentRequests, setSentRequests] = useState<string[]>([]);
   const [friendsTab, setFriendsTab] = useState<'friends' | 'requests' | 'find'>('friends');
 
-  const [theme, setTheme] = useState<ThemeKey>(() => {
-    if (typeof window !== 'undefined') return (localStorage.getItem('pulse_theme') as ThemeKey) || 'slate';
-    return 'slate';
+  const [theme, setTheme] = useState<string>(() => {
+    if (typeof window !== 'undefined') return localStorage.getItem('pulse_theme') || 'coral-dark';
+    return 'coral-dark';
   });
   const [soundEnabled, setSoundEnabled] = useState(true);
 
@@ -166,9 +172,9 @@ export default function Home() {
 
   /* ── 1. Splash Screen Loader ───────────────────────────────────────── */
   useEffect(() => {
-    const timer1 = setTimeout(() => setSplashProgress(60), 400);
-    const timer2 = setTimeout(() => setSplashProgress(100), 1100);
-    const timer3 = setTimeout(() => setShowSplash(false), 1600);
+    const timer1 = setTimeout(() => setSplashProgress(65), 350);
+    const timer2 = setTimeout(() => setSplashProgress(100), 900);
+    const timer3 = setTimeout(() => setShowSplash(false), 1400);
     return () => { clearTimeout(timer1); clearTimeout(timer2); clearTimeout(timer3); };
   }, []);
 
@@ -184,13 +190,11 @@ export default function Home() {
           if (parsed.avatar) setSelectedAvatar(parsed.avatar);
           if (parsed.bio) setUserBio(parsed.bio);
 
-          // Restore friends
           const savedFriends = localStorage.getItem(`syncpulse_friends_${parsed.id}`);
           if (savedFriends) {
             try { setFriends(JSON.parse(savedFriends)); } catch (e) {}
           }
 
-          // Auto-connect signaling for restored session
           const userObj: User = { id: parsed.id, name: parsed.name, avatar: parsed.avatar, status: 'online' };
           setRegisteredUser(userObj);
           sigRef.current?.connect();
@@ -200,7 +204,7 @@ export default function Home() {
     }
   }, []);
 
-  /* ── 3. Persist Friends to LocalStorage ───────────────────────────── */
+  /* ── 3. Persist Friends ───────────────────────────────────────────── */
   useEffect(() => {
     if (registeredUser && typeof window !== 'undefined') {
       localStorage.setItem(`syncpulse_friends_${registeredUser.id}`, JSON.stringify(friends));
@@ -227,7 +231,7 @@ export default function Home() {
     return () => clearInterval(interval);
   }, [isVoiceRecording]);
 
-  /* ── 4. Signaling Client & WebRTC Handlers ────────────────────────── */
+  /* ── 4. Signaling & WebRTC Handlers ─────────────────────────────── */
   useEffect(() => {
     const sig = new SignalingClient({ url: SIGNALING_URL, autoConnect: false });
     sigRef.current = sig;
@@ -648,31 +652,26 @@ export default function Home() {
      ════════════════════════════════════════════════════════════════════════ */
   if (showSplash) {
     return (
-      <div className="h-full w-full flex flex-col items-center justify-center relative overflow-hidden anim-fade" style={{ background: '#030712' }}>
-        {/* Floating Gradient Orbs */}
-        <div className="absolute top-1/3 left-1/3 w-96 h-96 rounded-full blur-3xl opacity-30 anim-float" style={{ background: '#3b82f6' }} />
-        <div className="absolute bottom-1/3 right-1/3 w-96 h-96 rounded-full blur-3xl opacity-30 anim-float" style={{ background: '#8b5cf6', animationDelay: '-3s' }} />
-
+      <div className="h-full w-full flex flex-col items-center justify-center relative overflow-hidden anim-fade" style={{ background: '#181a20' }}>
         <div className="relative z-10 flex flex-col items-center text-center p-6 max-w-sm w-full">
           <div className="relative mb-6">
-            <div className="absolute -inset-4 rounded-3xl bg-blue-500/20 blur-xl anim-ring" />
-            <div className="w-20 h-20 rounded-3xl flex items-center justify-center shadow-2xl relative z-10" style={{ background: 'linear-gradient(135deg, #3b82f6, #8b5cf6)' }}>
+            <div className="absolute -inset-4 rounded-3xl bg-red-500/20 blur-xl anim-ring" />
+            <div className="w-20 h-20 rounded-3xl flex items-center justify-center shadow-2xl relative z-10" style={{ background: 'linear-gradient(135deg, #ff4747, #e03232)' }}>
               <Zap size={44} className="text-white anim-glow" />
             </div>
           </div>
 
           <h1 className="text-3xl font-black tracking-tight text-white mb-1">
-            SyncPulse <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400">Pro</span>
+            SyncPulse <span className="text-red-500">Pro</span>
           </h1>
-          <p className="text-xs text-slate-400 font-medium mb-8">Enterprise WebRTC & AI Communication Network</p>
+          <p className="text-xs text-slate-400 font-medium mb-8">Enterprise WebRTC & Neumorphic Communication Network</p>
 
-          {/* Animated Loader Bar */}
           <div className="w-full bg-slate-800/80 h-2 rounded-full overflow-hidden border border-slate-700/50 p-0.5 shadow-inner mb-3">
-            <div className="h-full bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500 rounded-full transition-all duration-700 ease-out" style={{ width: `${splashProgress}%` }} />
+            <div className="h-full bg-gradient-to-r from-red-500 to-rose-600 rounded-full transition-all duration-700 ease-out" style={{ width: `${splashProgress}%` }} />
           </div>
 
           <div className="flex items-center justify-between w-full text-[10px] text-slate-500 font-mono">
-            <span>Initializing WebRTC Core...</span>
+            <span>Initializing Neumorphic Engine...</span>
             <span>{splashProgress}%</span>
           </div>
         </div>
@@ -681,38 +680,31 @@ export default function Home() {
   }
 
   /* ════════════════════════════════════════════════════════════════════════
-     2. HIGHLY ANIMATED SIGN IN SCREEN
+     2. NEUMORPHIC ANIMATED SIGN IN SCREEN (Matching Image 1 Aesthetic)
      ════════════════════════════════════════════════════════════════════════ */
   if (!registeredUser) {
     return (
       <div className="h-full w-full flex items-center justify-center relative overflow-hidden" style={{ background: 'var(--bg-app)' }}>
-        {/* Animated Background Spheres */}
-        <div className="absolute top-1/4 left-1/4 w-96 h-96 rounded-full blur-3xl opacity-25 anim-float" style={{ background: 'var(--accent)' }} />
-        <div className="absolute bottom-1/4 right-1/4 w-96 h-96 rounded-full blur-3xl opacity-25 anim-float" style={{ background: 'var(--purple)', animationDelay: '-3s' }} />
-
-        <form onSubmit={handleRegister} className="relative z-10 w-full max-w-md mx-4 anim-scale glass-panel rounded-3xl p-8 md:p-10 shadow-2xl">
+        <form onSubmit={handleRegister} className="relative z-10 w-full max-w-md mx-4 anim-scale neu-card p-8 md:p-10">
           <div className="flex flex-col items-center mb-8">
-            <div className="relative mb-4">
-              <div className="absolute -inset-3 rounded-3xl bg-blue-500/20 blur-lg anim-ring" />
-              <div className="w-16 h-16 rounded-2xl flex items-center justify-center relative z-10 shadow-2xl" style={{ background: 'linear-gradient(135deg, var(--accent), var(--purple))' }}>
-                <Zap size={32} className="text-white" />
-              </div>
+            <div className="neu-btn-circle w-20 h-20 mb-4" style={{ background: 'linear-gradient(135deg, #ff4747, #e03232)', border: 'none' }}>
+              <Zap size={36} className="text-white" />
             </div>
-            <h1 className="text-3xl font-extrabold tracking-tight" style={{ color: 'var(--text-primary)' }}>SyncPulse Pro</h1>
-            <p className="text-xs mt-1 text-center font-medium" style={{ color: 'var(--text-muted)' }}>Enterprise WebRTC Calling & AI Communications</p>
+            <h1 className="text-3xl font-black tracking-tight" style={{ color: 'var(--text-primary)' }}>SyncPulse Pro</h1>
+            <p className="text-xs mt-1 text-center font-semibold" style={{ color: 'var(--text-muted)' }}>Neumorphic WebRTC & AI Workspace</p>
           </div>
 
           <div className="mb-6">
-            <label className="block text-[11px] font-bold uppercase tracking-wider mb-3 text-center" style={{ color: 'var(--text-muted)' }}>Choose Avatar Profile</label>
+            <label className="block text-[11px] font-bold uppercase tracking-wider mb-3 text-center" style={{ color: 'var(--text-muted)' }}>Choose Profile Avatar</label>
             <div className="flex justify-center gap-3">
               {AVATAR_PRESETS.map((url, i) => (
-                <img key={i} src={url} alt="" onClick={() => setSelectedAvatar(url)} className="w-12 h-12 rounded-full object-cover cursor-pointer transition-all hover:scale-125 shadow-md" style={{ border: selectedAvatar === url ? '3px solid var(--accent)' : '2px solid var(--border)' }} />
+                <img key={i} src={url} alt="" onClick={() => setSelectedAvatar(url)} className="w-12 h-12 rounded-full object-cover cursor-pointer transition-all hover:scale-125 shadow-md" style={{ border: selectedAvatar === url ? '3px solid var(--accent)' : '2px solid transparent' }} />
               ))}
             </div>
           </div>
 
           <label className="block text-[11px] font-bold uppercase tracking-wider mb-2" style={{ color: 'var(--text-muted)' }}>Your Display Name</label>
-          <input type="text" value={userName} onChange={(e) => setUserName(e.target.value)} placeholder="e.g. Alex Rivera" className="app-input mb-6 !rounded-2xl !py-3.5" required autoFocus />
+          <input type="text" value={userName} onChange={(e) => setUserName(e.target.value)} placeholder="e.g. Sara Sanders" className="neu-input mb-6 !w-full" required autoFocus />
           <button type="submit" className="app-btn app-btn-primary w-full py-4 text-xs font-bold shadow-xl !rounded-2xl flex items-center justify-center gap-2">
             <Sparkles size={16} /> Enter Workspace
           </button>
@@ -722,7 +714,7 @@ export default function Home() {
   }
 
   /* ════════════════════════════════════════════════════════════════════════
-     3. MAIN APPLICATION WORKSPACE
+     3. MAIN NEUMORPHIC APPLICATION (Matching Image 1 Exact Layout)
      ════════════════════════════════════════════════════════════════════════ */
   return (
     <div className="h-full w-full flex flex-col md:flex-row relative overflow-hidden" style={{ background: 'var(--bg-app)' }}>
@@ -741,18 +733,18 @@ export default function Home() {
       {/* 📞 OUTGOING RINGING MODAL */}
       {outgoingCall && !activeRoomId && (
         <div className="fixed inset-0 bg-slate-950/85 backdrop-blur-2xl flex items-center justify-center p-4 z-50 animate-fade-in">
-          <div className="bg-slate-900/90 border border-slate-800 p-8 rounded-3xl max-w-sm w-full text-center shadow-2xl flex flex-col items-center">
+          <div className="neu-card p-8 max-w-sm w-full text-center flex flex-col items-center">
             <div className="relative mb-6">
-              <div className="absolute -inset-4 rounded-full bg-indigo-500/30 animate-ping" />
+              <div className="absolute -inset-4 rounded-full bg-red-500/30 animate-ping" />
               <img
                 src={outgoingCall.target.avatar || AVATAR_PRESETS[0]}
                 alt={outgoingCall.target.name}
-                className="relative w-24 h-24 rounded-full border-4 border-indigo-500/60 shadow-2xl object-cover"
+                className="relative w-24 h-24 rounded-full border-4 border-red-500/60 shadow-2xl object-cover"
               />
             </div>
-            <h3 className="text-xl font-bold text-slate-100">{outgoingCall.target.name}</h3>
-            <p className="text-xs text-indigo-400 mt-2 font-semibold flex items-center gap-2 justify-center">
-              <span className="w-2.5 h-2.5 rounded-full bg-indigo-500 animate-pulse" />
+            <h3 className="text-xl font-bold text-white">{outgoingCall.target.name}</h3>
+            <p className="text-xs text-red-400 mt-2 font-semibold flex items-center gap-2 justify-center">
+              <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
               Calling ({outgoingCall.isVideo ? 'Video' : 'Voice'})...
             </p>
 
@@ -760,19 +752,19 @@ export default function Home() {
               onClick={leaveCall}
               className="mt-8 flex flex-col items-center gap-1.5 group"
             >
-              <div className="p-4 rounded-full bg-red-600/20 text-red-400 border border-red-500/40 group-hover:bg-red-600 group-hover:text-white transition-all duration-200 group-hover:scale-110 shadow-lg">
+              <div className="neu-btn-circle !w-14 !h-14 bg-red-600 text-white">
                 <PhoneOff size={24} />
               </div>
-              <span className="text-xs text-slate-400 group-hover:text-slate-200">End Call</span>
+              <span className="text-xs text-slate-400 group-hover:text-white">End Call</span>
             </button>
           </div>
         </div>
       )}
 
-      {/* ⚠️ NOTIFICATION TOAST BANNER */}
+      {/* ⚠️ NOTIFICATION TOAST */}
       {busyNotice && (
-        <div className="fixed top-6 left-1/2 -translate-x-1/2 z-50 px-6 py-3 rounded-2xl bg-indigo-600/20 border border-indigo-500/40 text-indigo-200 backdrop-blur-xl text-xs font-semibold shadow-2xl flex items-center gap-2 animate-bounce">
-          <Activity size={16} className="text-indigo-400 animate-pulse" /> {busyNotice}
+        <div className="fixed top-6 left-1/2 -translate-x-1/2 z-50 px-6 py-3 rounded-2xl neu-card text-white text-xs font-semibold shadow-2xl flex items-center gap-2 animate-bounce">
+          <Activity size={16} className="text-red-400 animate-pulse" /> {busyNotice}
         </div>
       )}
 
@@ -781,14 +773,13 @@ export default function Home() {
         <div className="h-full w-full flex flex-col relative z-40" style={{ background: 'var(--bg-app)' }}>
           {/* Header Bar */}
           <div className="absolute top-4 left-4 right-4 z-30 flex items-center justify-between pointer-events-none">
-            <div className="pointer-events-auto flex items-center gap-3 px-5 py-2.5 rounded-full backdrop-blur-2xl" style={{ background: 'rgba(15, 23, 42, 0.8)', border: '1px solid var(--border)', boxShadow: 'var(--shadow)' }}>
+            <div className="pointer-events-auto flex items-center gap-3 px-5 py-2.5 neu-card backdrop-blur-2xl">
               <span className="w-3 h-3 rounded-full anim-pulse" style={{ background: 'var(--green)' }} />
-              <span className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>{activeRoomId}</span>
-              <span className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>· {participants.length + 1} connected</span>
+              <span className="text-xs font-bold text-white">{activeRoomId}</span>
+              <span className="text-xs font-medium text-slate-400">· {participants.length + 1} connected</span>
 
-              {/* In-Call Invite Button */}
-              <button onClick={() => setShowInviteModal(true)} className="ml-2 app-btn app-btn-primary px-3 py-1 text-[11px] font-bold !rounded-full">
-                <UserPlus size={13} /> Invite Online User
+              <button onClick={() => setShowInviteModal(true)} className="ml-2 app-btn app-btn-primary px-3.5 py-1.5 text-[11px] font-bold !rounded-full">
+                <UserPlus size={13} /> Invite User
               </button>
             </div>
             <div className="pointer-events-auto">
@@ -796,13 +787,13 @@ export default function Home() {
             </div>
           </div>
 
-          {/* In-Call Invite Users Modal Overlay */}
+          {/* In-Call Invite Modal */}
           {showInviteModal && (
             <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
-              <div className="bg-slate-900 border border-slate-800 p-6 rounded-3xl max-w-md w-full shadow-2xl">
+              <div className="neu-card p-6 max-w-md w-full shadow-2xl">
                 <div className="flex items-center justify-between mb-4">
                   <h3 className="text-base font-bold text-white flex items-center gap-2">
-                    <UserPlus size={18} className="text-indigo-400" /> Invite Users to Active Call
+                    <UserPlus size={18} className="text-red-400" /> Invite Users to Active Call
                   </h3>
                   <button onClick={() => setShowInviteModal(false)} className="p-1 rounded-full text-slate-400 hover:bg-slate-800"><X size={18} /></button>
                 </div>
@@ -816,7 +807,7 @@ export default function Home() {
                           <img src={u.avatar} alt="" className="w-9 h-9 rounded-full object-cover" />
                           <span className="text-xs font-semibold text-white">{u.name}</span>
                         </div>
-                        <button onClick={() => inviteUserToCall(u)} className="app-btn app-btn-primary px-3 py-1.5 text-xs">
+                        <button onClick={() => inviteUserToCall(u)} className="app-btn app-btn-primary px-3.5 py-1.5 text-xs">
                           Invite
                         </button>
                       </div>
@@ -855,10 +846,10 @@ export default function Home() {
       ) : (
         <>
           {/* ─── DESKTOP LEFT SIDEBAR ─────────────────────────────────────── */}
-          <aside className="hidden md:flex w-20 shrink-0 flex-col items-center py-5 gap-2" style={{ background: 'var(--bg-app)', borderRight: '1px solid var(--border)' }}>
-            <div className="mb-6 relative">
-              <div className="w-12 h-12 rounded-2xl flex items-center justify-center font-bold text-white shadow-xl anim-glow" style={{ background: 'linear-gradient(135deg, var(--accent), var(--purple))' }}>
-                <Zap size={24} />
+          <aside className="hidden md:flex w-20 shrink-0 flex-col items-center py-5 gap-3" style={{ background: 'var(--bg-sidebar)', borderRight: '1px solid var(--border)' }}>
+            <div className="mb-4">
+              <div className="neu-btn-circle !w-12 !h-12 bg-red-500 text-white" style={{ background: 'var(--accent)' }}>
+                <Zap size={22} />
               </div>
             </div>
 
@@ -873,15 +864,9 @@ export default function Home() {
               const active = screen === nav.key;
               return (
                 <button key={nav.key} onClick={() => { setScreen(nav.key); if (nav.key !== 'chats') setSelectedContact(null); }}
-                  className="relative w-14 h-14 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all hover:scale-105"
-                  title={nav.label}
-                  style={{
-                    background: active ? 'var(--accent-dim)' : 'transparent',
-                    color: active ? 'var(--accent)' : 'var(--text-muted)',
-                  }}>
-                  {active && <div className="absolute left-0 top-1/2 -translate-y-1/2 w-[3.5px] h-6 rounded-r-full" style={{ background: 'var(--accent)' }} />}
-                  <nav.icon size={21} />
-                  <span className="text-[9px] font-bold">{nav.label}</span>
+                  className={`neu-btn-circle !w-12 !h-12 flex-col gap-0.5 transition-all ${active ? '!bg-red-500/20 text-red-400 border-red-500/50' : 'text-slate-400'}`}
+                  title={nav.label}>
+                  <nav.icon size={19} style={{ color: active ? 'var(--accent)' : 'inherit' }} />
                 </button>
               );
             })}
@@ -893,26 +878,34 @@ export default function Home() {
               <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full" style={{ background: 'var(--green)', border: '2px solid var(--bg-app)' }} />
             </div>
 
-            <button onClick={handleLogout} className="app-btn app-btn-ghost w-10 h-10 rounded-xl" title="Logout" style={{ color: 'var(--text-muted)' }}>
-              <LogOut size={18} />
+            <button onClick={handleLogout} className="neu-btn-circle !w-10 !h-10 text-slate-400 hover:text-red-400" title="Logout">
+              <LogOut size={16} />
             </button>
           </aside>
 
-          {/* ─── SUB-PAGE 1: CHATS ────────────────────────────────────────── */}
+          {/* ─── SUB-PAGE 1: CHATS (Matching Image 1 Neumorphic Design) ────── */}
           {screen === 'chats' && (
             <div className="flex-1 flex h-full overflow-hidden">
-              <div className={`${selectedContact ? 'hidden md:flex' : 'flex'} w-full md:w-84 flex-col shrink-0 h-full`} style={{ background: 'var(--bg-sidebar)', borderRight: '1px solid var(--border)' }}>
-                <div className="p-4 pb-3">
-                  <div className="flex items-center justify-between mb-3">
-                    <h2 className="text-xl font-extrabold" style={{ color: 'var(--text-primary)' }}>Messages</h2>
+              {/* CHATS LIST SIDEBAR (Matching Image 1 Left Screen) */}
+              <div className={`${selectedContact ? 'hidden md:flex' : 'flex'} w-full md:w-84 flex-col shrink-0 h-full p-4`} style={{ background: 'var(--bg-sidebar)', borderRight: '1px solid var(--border)' }}>
+                {/* Header (Image 1 Header) */}
+                <div className="flex items-center justify-between mb-5 px-1">
+                  <div className="flex items-center gap-3">
+                    <img src={registeredUser.avatar} alt="" className="w-10 h-10 rounded-full object-cover shadow-md" style={{ border: '2px solid var(--accent)' }} />
+                    <h2 className="text-xl font-bold tracking-tight" style={{ color: 'var(--text-primary)' }}>Chats</h2>
                   </div>
-                  <div className="relative">
-                    <Search size={16} className="absolute left-3.5 top-1/2 -translate-y-1/2" style={{ color: 'var(--text-muted)' }} />
-                    <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Search messages..." className="app-input pl-10 !rounded-full !py-2.5 text-[13px]" />
-                  </div>
+                  <button onClick={() => setScreen('friends')} className="neu-btn-circle !w-10 !h-10 text-white" style={{ background: 'var(--accent)' }} title="Add New Chat / Friend">
+                    <Plus size={20} />
+                  </button>
                 </div>
 
-                <div className="flex-1 overflow-y-auto space-y-0.5 px-2">
+                {/* Search Field (Image 1 Inset Search Bar) */}
+                <div className="relative mb-5">
+                  <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Search" className="neu-input w-full pl-6 text-sm" />
+                </div>
+
+                {/* Contact List Rows (Image 1 List Style) */}
+                <div className="flex-1 overflow-y-auto space-y-3 pr-1">
                   {filteredContacts.map((c) => {
                     const isSel = selectedContact?.id === c.id;
                     const last = getLastMsg(c);
@@ -921,31 +914,34 @@ export default function Home() {
 
                     return (
                       <div key={c.id} onClick={() => setSelectedContact(c)}
-                        className="flex items-center gap-3.5 px-3.5 py-3 rounded-2xl cursor-pointer transition-all my-0.5"
-                        style={{ background: isSel ? 'var(--bg-active)' : 'transparent' }}
-                        onMouseEnter={(e) => { if (!isSel) e.currentTarget.style.background = 'var(--bg-hover)'; }}
-                        onMouseLeave={(e) => { if (!isSel) e.currentTarget.style.background = 'transparent'; }}>
+                        className={`flex items-center gap-3.5 p-3.5 rounded-2xl cursor-pointer transition-all ${isSel ? 'neu-card border-red-500/40' : 'hover:bg-slate-800/40'}`}>
                         <div className="relative shrink-0">
-                          <img src={c.avatar} alt="" className="w-12 h-12 rounded-full object-cover" style={{ border: isAi ? '2px solid var(--accent)' : '2px solid var(--border)' }} />
+                          <img src={c.avatar} alt="" className="w-13 h-13 rounded-full object-cover" style={{ border: isAi ? '2px solid var(--accent)' : '2px solid var(--border)' }} />
                           <span className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full" style={{
                             background: isAi ? 'var(--accent)' : 'var(--green)',
                             border: '2px solid var(--bg-sidebar)'
                           }} />
                         </div>
+
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between">
-                            <span className="text-[13px] font-bold truncate flex items-center gap-1" style={{ color: isAi ? 'var(--accent)' : 'var(--text-primary)' }}>
+                            <span className="text-sm font-bold truncate flex items-center gap-1" style={{ color: isAi ? 'var(--accent)' : 'var(--text-primary)' }}>
                               {c.name} {isAi && <Sparkles size={13} />}
                             </span>
-                            {last && <span className="text-[10px] shrink-0 font-medium" style={{ color: 'var(--text-muted)' }}>{new Date(last.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>}
+                            {last && (
+                              <span className="text-[11px] font-semibold shrink-0" style={{ color: unread > 0 ? 'var(--accent)' : 'var(--text-muted)' }}>
+                                {new Date(last.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                            )}
                           </div>
+
                           <div className="flex items-center justify-between mt-1">
-                            <p className="text-[12px] truncate pr-2 font-medium" style={{ color: 'var(--text-muted)' }}>
+                            <p className="text-xs truncate pr-2 font-medium" style={{ color: 'var(--text-muted)' }}>
                               {last ? (last.isEdited ? `${last.text} (edited)` : last.text) : (isAi ? 'Ask PulseAI anything...' : 'Tap to open chat')}
                             </p>
                             {unread > 0 && (
-                              <span className="w-4 h-4 rounded-full text-[9px] font-extrabold flex items-center justify-center text-white shrink-0 shadow-md" style={{ background: 'var(--accent)' }}>
-                                {unread}
+                              <span className="neu-badge shrink-0">
+                                {unread > 99 ? '99+' : unread}
                               </span>
                             )}
                           </div>
@@ -956,31 +952,36 @@ export default function Home() {
                 </div>
               </div>
 
+              {/* CHAT WINDOW (Matching Image 1 Right Screen) */}
               {selectedContact ? (
                 <div className="flex-1 flex flex-col h-full overflow-hidden" style={{ background: 'var(--bg-main)' }}>
-                  {/* Header */}
-                  <div className="flex items-center justify-between px-5 h-16 shrink-0" style={{ background: 'var(--bg-sidebar)', borderBottom: '1px solid var(--border)' }}>
-                    <div className="flex items-center gap-3">
-                      <button onClick={() => setSelectedContact(null)} className="md:hidden app-btn app-btn-ghost w-8 h-8 rounded-full p-0 flex items-center justify-center">
+                  {/* Chat Header (Matching Image 1 Header) */}
+                  <div className="flex items-center justify-between px-6 h-20 shrink-0" style={{ background: 'var(--bg-sidebar)', borderBottom: '1px solid var(--border)' }}>
+                    <div className="flex items-center gap-3.5">
+                      <button onClick={() => setSelectedContact(null)} className="md:hidden neu-btn-circle !w-9 !h-9 text-red-400">
                         <ArrowLeft size={18} />
                       </button>
-                      <img src={selectedContact.avatar} alt="" className="w-10 h-10 rounded-full object-cover" style={{ border: '2px solid var(--border)' }} />
+                      <img src={selectedContact.avatar} alt="" className="w-11 h-11 rounded-full object-cover" style={{ border: '2px solid var(--accent)' }} />
                       <div>
-                        <h4 className="text-sm font-bold flex items-center gap-1.5" style={{ color: 'var(--text-primary)' }}>
+                        <h4 className="text-base font-bold text-white flex items-center gap-1.5">
                           {selectedContact.name}
                         </h4>
-                        <span className="text-[11px] font-medium" style={{ color: 'var(--green)' }}>Active Online</span>
+                        <span className="text-xs font-medium text-slate-400">Active Now</span>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2">
-                      <button onClick={handleSummarizeChat} className="app-btn app-btn-ghost text-xs px-3 py-1.5 rounded-xl flex items-center gap-1.5" style={{ color: 'var(--accent)', background: 'var(--accent-dim)' }}>
-                        <Bot size={15} /> <span className="hidden sm:inline">Summarize</span>
+                    <div className="flex items-center gap-3">
+                      <button onClick={handleSummarizeChat} className="neu-btn-circle !w-10 !h-10 text-red-400" title="Summarize Chat">
+                        <Bot size={18} />
                       </button>
                       {selectedContact.id !== AI_BOT_USER.id && (
                         <>
-                          <button onClick={() => startCall(selectedContact, false)} className="app-btn app-btn-ghost w-9 h-9 rounded-full" title="Voice Call"><Phone size={18} style={{ color: 'var(--green)' }} /></button>
-                          <button onClick={() => startCall(selectedContact, true)} className="app-btn app-btn-ghost w-9 h-9 rounded-full" style={{ color: 'var(--accent)' }} title="Video Call"><Video size={18} /></button>
+                          <button onClick={() => startCall(selectedContact, false)} className="neu-btn-circle !w-11 !h-11 text-white" style={{ background: 'var(--accent)' }} title="Voice Call">
+                            <Phone size={19} />
+                          </button>
+                          <button onClick={() => startCall(selectedContact, true)} className="neu-btn-circle !w-11 !h-11 text-white" style={{ background: 'var(--accent)' }} title="Video Call">
+                            <Video size={19} />
+                          </button>
                         </>
                       )}
                     </div>
@@ -988,33 +989,38 @@ export default function Home() {
 
                   {/* Pinned Message Banner */}
                   {pinnedMessage && (
-                    <div className="px-5 py-2.5 flex items-center justify-between text-xs shrink-0" style={{ background: 'var(--accent-dim)', borderBottom: '1px solid var(--accent)' }}>
-                      <div className="flex items-center gap-2 truncate font-medium" style={{ color: 'var(--accent)' }}>
-                        <Pin size={14} /> Pinned: <span className="truncate">{pinnedMessage.text}</span>
+                    <div className="px-6 py-2.5 flex items-center justify-between text-xs shrink-0" style={{ background: 'var(--accent-dim)', borderBottom: '1px solid var(--accent)' }}>
+                      <div className="flex items-center gap-2 truncate font-medium text-red-400">
+                        <Pin size={14} /> Pinned: <span className="truncate text-white">{pinnedMessage.text}</span>
                       </div>
                       <button onClick={() => setPinnedMessage(null)} className="p-1 rounded-full hover:bg-black/20"><X size={14} /></button>
                     </div>
                   )}
 
-                  {/* Chat Thread */}
-                  <div className="flex-1 overflow-y-auto px-4 md:px-6 py-4 space-y-3">
+                  {/* Chat Message Thread (Matching Image 1 Bubbles) */}
+                  <div className="flex-1 overflow-y-auto px-4 md:px-8 py-6 space-y-4">
+                    {/* Date Divider */}
+                    <div className="flex justify-center">
+                      <span className="text-xs font-semibold text-slate-500 py-1 px-4 rounded-full" style={{ background: 'var(--bg-sidebar)' }}>Today</span>
+                    </div>
+
                     {activeChat.map((msg) => {
                       const isMe = msg.sender.id === registeredUser.id;
                       const emojiOnly = isOnlyEmoji(msg.text);
 
                       return (
                         <div key={msg.id} className={`group relative flex ${isMe ? 'justify-end' : 'justify-start'} anim-slide-up my-1`}>
-                          <div className={`absolute -top-4 ${isMe ? 'right-2' : 'left-2'} hidden group-hover:flex items-center gap-1 z-30 px-2 py-1 rounded-full shadow-lg`} style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)' }}>
+                          <div className={`absolute -top-4 ${isMe ? 'right-2' : 'left-2'} hidden group-hover:flex items-center gap-1 z-30 px-2 py-1 rounded-full shadow-lg neu-card`}>
                             {EMOJI_REACTIONS.slice(0, 4).map(emoji => (
                               <button key={emoji} onClick={() => handleAddReaction(msg.id, emoji)} className="text-xs hover:scale-130 transition-transform px-0.5">
                                 {emoji}
                               </button>
                             ))}
-                            <button onClick={() => setPinnedMessage(msg)} className="p-0.5 rounded-full text-xs ml-1" style={{ color: 'var(--text-muted)' }} title="Pin">
+                            <button onClick={() => setPinnedMessage(msg)} className="p-0.5 rounded-full text-xs ml-1 text-slate-400 hover:text-white" title="Pin">
                               <Pin size={12} />
                             </button>
                             {isMe && (
-                              <button onClick={() => { setEditingMessage(msg); setInputText(msg.text); }} className="p-0.5 rounded-full text-xs ml-1" style={{ color: 'var(--accent)' }} title="Edit">
+                              <button onClick={() => { setEditingMessage(msg); setInputText(msg.text); }} className="p-0.5 rounded-full text-xs ml-1 text-red-400" title="Edit">
                                 <Edit2 size={12} />
                               </button>
                             )}
@@ -1023,17 +1029,17 @@ export default function Home() {
                           {emojiOnly ? (
                             <div className="text-5xl py-1 my-1 select-none anim-scale">{msg.text}</div>
                           ) : (
-                            <div className="max-w-[80%] md:max-w-[70%] px-4 py-2.5 text-[13px] leading-relaxed relative shadow-md" style={{
+                            <div className={`max-w-[80%] md:max-w-[65%] px-5 py-3 text-sm leading-relaxed relative ${isMe ? 'shadow-xl' : 'neu-card'}`} style={{
                               background: isMe ? 'var(--bubble-out)' : 'var(--bubble-in)',
-                              color: 'var(--text-primary)',
-                              borderRadius: isMe ? '18px 18px 4px 18px' : '18px 18px 18px 4px',
+                              color: '#ffffff',
+                              borderRadius: isMe ? '22px 22px 4px 22px' : '22px 22px 22px 4px',
                             }}>
-                              <p className="break-words whitespace-pre-line font-normal">{msg.text}</p>
-                              <div className="flex items-center justify-end gap-1 mt-1 text-[10px] font-medium" style={{ color: 'var(--text-muted)' }}>
+                              <p className="break-words whitespace-pre-line font-medium">{msg.text}</p>
+                              <div className={`flex items-center justify-end gap-1 mt-1 text-[11px] font-medium ${isMe ? 'text-red-100' : 'text-slate-400'}`}>
                                 {msg.isEdited && <span className="italic mr-1">(edited)</span>}
                                 <span>{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                                 {isMe && (
-                                  <span style={{ color: msg.status === 'read' ? 'var(--accent)' : 'var(--text-muted)' }}>
+                                  <span className="text-white ml-0.5">
                                     {msg.status === 'read' ? <CheckCheck size={14} /> : <Check size={14} />}
                                   </span>
                                 )}
@@ -1046,44 +1052,40 @@ export default function Home() {
 
                     {isAiThinking && (
                       <div className="flex justify-start anim-fade">
-                        <div className="px-4 py-2.5 rounded-2xl text-xs flex items-center gap-2 font-semibold shadow-md" style={{ background: 'var(--bg-surface)', border: '1px solid var(--border)', color: 'var(--accent)' }}>
-                          <Sparkles size={16} className="animate-spin" /> PulseAI is processing...
+                        <div className="neu-card px-5 py-3 rounded-2xl text-xs flex items-center gap-2 font-semibold text-red-400">
+                          <Sparkles size={16} className="animate-spin" /> PulseAI is typing...
                         </div>
                       </div>
                     )}
                     <div ref={messagesEndRef} />
                   </div>
 
-                  {/* Input Bar */}
-                  <form onSubmit={(e) => { e.preventDefault(); handleSendMessage(); }} className="px-4 py-3 flex items-center gap-2 shrink-0" style={{ background: 'var(--bg-sidebar)', borderTop: '1px solid var(--border)' }}>
+                  {/* Input Bar (Matching Image 1 Bottom Bar) */}
+                  <form onSubmit={(e) => { e.preventDefault(); handleSendMessage(); }} className="px-4 md:px-6 py-4 flex items-center gap-3 shrink-0" style={{ background: 'var(--bg-sidebar)', borderTop: '1px solid var(--border)' }}>
                     {isVoiceRecording ? (
-                      <div className="flex-1 flex items-center justify-between px-4 py-2.5 rounded-full anim-fade" style={{ background: 'var(--red-dim)', border: '1px solid var(--red)' }}>
-                        <div className="flex items-center gap-2 text-xs font-bold" style={{ color: 'var(--red)' }}>
+                      <div className="flex-1 flex items-center justify-between px-5 py-3 rounded-full anim-fade bg-red-500/20 border border-red-500/50">
+                        <div className="flex items-center gap-2 text-xs font-bold text-red-400">
                           <span className="w-2.5 h-2.5 rounded-full bg-red-500 anim-pulse" /> Recording Voice Note... {recordingSeconds}s
                         </div>
                         <div className="flex items-center gap-2">
-                          <button type="button" onClick={() => setIsVoiceRecording(false)} className="text-xs text-muted-foreground px-2 py-1 font-semibold">Cancel</button>
-                          <button type="button" onClick={handleSendVoiceNote} className="app-btn px-4 py-1.5 text-xs text-white shadow-md" style={{ background: 'var(--red)' }}>Send</button>
+                          <button type="button" onClick={() => setIsVoiceRecording(false)} className="text-xs text-slate-400 px-2 py-1 font-semibold">Cancel</button>
+                          <button type="button" onClick={handleSendVoiceNote} className="app-btn px-4 py-1.5 text-xs text-white shadow-md bg-red-500">Send</button>
                         </div>
                       </div>
                     ) : (
                       <>
-                        <button type="button" onClick={() => fileInputRef.current?.click()} className="app-btn app-btn-ghost w-10 h-10 rounded-full shrink-0 p-0 flex items-center justify-center" title="Attach File">
-                          <File size={19} />
+                        <button type="button" onClick={() => setShowAiEnhancerMenu(!showAiEnhancerMenu)} className="neu-btn-circle !w-11 !h-11 shrink-0 text-red-400" title="Emoji & AI Enhancer">
+                          <Smile size={20} />
                         </button>
 
-                        <button type="button" onClick={() => setShowAiEnhancerMenu(!showAiEnhancerMenu)} className="app-btn app-btn-ghost w-10 h-10 rounded-full shrink-0 p-0 flex items-center justify-center" style={{ color: 'var(--accent)', background: showAiEnhancerMenu ? 'var(--accent-dim)' : 'transparent' }} title="✨ AI Input Enhancer">
-                          <Sparkles size={19} />
+                        <input type="text" value={inputText} onChange={(e) => setInputText(e.target.value)} placeholder="Type a message" className="neu-input flex-1 !rounded-full !py-3 text-sm" autoComplete="off" />
+
+                        <button type="button" onClick={() => fileInputRef.current?.click()} className="neu-btn-circle !w-11 !h-11 shrink-0 text-slate-400 hover:text-red-400" title="Attach File">
+                          <Paperclip size={19} />
                         </button>
 
-                        <input type="text" value={inputText} onChange={(e) => setInputText(e.target.value)} placeholder={`Message ${selectedContact.name}...`} className="app-input !rounded-full flex-1" autoComplete="off" />
-
-                        <button type="button" onClick={() => setIsVoiceRecording(true)} className="app-btn app-btn-ghost w-10 h-10 rounded-full shrink-0 p-0 flex items-center justify-center" title="Record Voice Note">
-                          <Mic size={19} />
-                        </button>
-
-                        <button type="submit" disabled={!inputText.trim() && !selectedFile} className="app-btn app-btn-primary w-10 h-10 !rounded-full shrink-0 disabled:opacity-30 p-0 flex items-center justify-center shadow-lg">
-                          <Send size={17} />
+                        <button type="button" onClick={() => setIsVoiceRecording(true)} className="neu-btn-circle !w-12 !h-12 shrink-0 text-white" style={{ background: 'var(--accent)' }} title="Record Voice Note">
+                          <Mic size={20} />
                         </button>
                       </>
                     )}
@@ -1091,11 +1093,11 @@ export default function Home() {
                 </div>
               ) : (
                 <div className="hidden md:flex flex-1 flex-col items-center justify-center anim-fade" style={{ background: 'var(--bg-main)' }}>
-                  <div className="w-20 h-20 rounded-3xl flex items-center justify-center mb-4 shadow-2xl anim-glow" style={{ background: 'var(--accent-dim)', border: '1px solid var(--accent)' }}>
-                    <MessageSquare size={36} style={{ color: 'var(--accent)' }} />
+                  <div className="neu-btn-circle !w-24 !h-24 mb-4 text-red-400" style={{ background: 'var(--accent-dim)' }}>
+                    <MessageSquare size={40} style={{ color: 'var(--accent)' }} />
                   </div>
-                  <h3 className="text-lg font-extrabold" style={{ color: 'var(--text-primary)' }}>SyncPulse Pro Network</h3>
-                  <p className="text-xs mt-1 font-medium" style={{ color: 'var(--text-muted)' }}>Select a friend or PulseAI to start chatting & calling</p>
+                  <h3 className="text-xl font-extrabold text-white">SyncPulse Pro Network</h3>
+                  <p className="text-xs mt-1 font-medium text-slate-400">Select a contact or PulseAI to start chatting & calling</p>
                 </div>
               )}
             </div>
@@ -1104,50 +1106,50 @@ export default function Home() {
           {/* ─── SUB-PAGE 2: CALLS STUDIO ────────────────────────────────────── */}
           {screen === 'calls' && (
             <div className="flex-1 flex flex-col h-full overflow-hidden" style={{ background: 'var(--bg-main)' }}>
-              <div className="px-6 h-16 flex items-center shrink-0" style={{ borderBottom: '1px solid var(--border)', background: 'var(--bg-sidebar)' }}>
-                <h2 className="text-lg font-extrabold flex items-center gap-2.5" style={{ color: 'var(--text-primary)' }}>
-                  <PhoneCall size={20} style={{ color: 'var(--accent)' }} /> WebRTC Video Calling Studio
+              <div className="px-6 h-20 flex items-center shrink-0" style={{ borderBottom: '1px solid var(--border)', background: 'var(--bg-sidebar)' }}>
+                <h2 className="text-xl font-extrabold flex items-center gap-2.5 text-white">
+                  <PhoneCall size={22} style={{ color: 'var(--accent)' }} /> WebRTC Video Calling Studio
                 </h2>
               </div>
               <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-6">
-                <div className="p-6 rounded-3xl space-y-4 shadow-2xl glass-panel">
-                  <label className="text-[11px] font-extrabold uppercase tracking-widest block flex items-center gap-2" style={{ color: 'var(--accent)' }}>
+                <div className="neu-card p-6 space-y-4">
+                  <label className="text-[11px] font-extrabold uppercase tracking-widest block flex items-center gap-2 text-red-400">
                     <Hash size={15} /> Join Instant Multi-User Group Room
                   </label>
                   <div className="flex gap-3">
-                    <input type="text" value={groupRoomInput} onChange={(e) => setGroupRoomInput(e.target.value)} placeholder="e.g. engineering-standup" className="app-input flex-1 !rounded-2xl !py-3" />
-                    <button onClick={() => joinGroup(true)} disabled={!groupRoomInput.trim()} className="app-btn app-btn-primary px-6 py-3 !rounded-2xl text-xs font-bold disabled:opacity-30 shadow-lg">
+                    <input type="text" value={groupRoomInput} onChange={(e) => setGroupRoomInput(e.target.value)} placeholder="e.g. engineering-standup" className="neu-input flex-1 !py-3" />
+                    <button onClick={() => joinGroup(true)} disabled={!groupRoomInput.trim()} className="app-btn app-btn-primary px-6 py-3 text-xs font-bold disabled:opacity-30">
                       <Video size={17} /> Join Video Studio
                     </button>
                   </div>
                 </div>
 
                 <div>
-                  <h3 className="text-[11px] font-extrabold uppercase tracking-widest mb-4 flex items-center gap-2" style={{ color: 'var(--text-muted)' }}>
+                  <h3 className="text-[11px] font-extrabold uppercase tracking-widest mb-4 flex items-center gap-2 text-slate-400">
                     <Users size={15} style={{ color: 'var(--accent)' }} /> Active Friends ({friendObjects.length})
                   </h3>
                   {friendObjects.length === 0 ? (
-                    <div className="p-10 rounded-3xl text-center glass-panel">
-                      <Users size={40} className="mx-auto mb-3 opacity-30" style={{ color: 'var(--text-muted)' }} />
-                      <p className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>No friends online to call</p>
-                      <p className="text-xs mt-1 font-medium" style={{ color: 'var(--text-muted)' }}>Go to the Friends tab to send friend requests to online users!</p>
+                    <div className="neu-card p-10 text-center">
+                      <Users size={40} className="mx-auto mb-3 opacity-30 text-slate-500" />
+                      <p className="text-sm font-bold text-white">No friends online to call</p>
+                      <p className="text-xs mt-1 font-medium text-slate-400">Go to the Friends tab to send friend requests to online users!</p>
                     </div>
                   ) : (
                     friendObjects.map((u) => (
-                      <div key={u.id} className="flex items-center justify-between p-4 rounded-2xl mb-3 shadow-lg glass-panel transition-all hover:scale-[1.01]">
+                      <div key={u.id} className="flex items-center justify-between p-4 rounded-2xl mb-3 neu-card">
                         <div className="flex items-center gap-3.5">
                           <img src={u.avatar} alt="" className="w-12 h-12 rounded-full object-cover" style={{ border: '2px solid var(--accent)' }} />
                           <div>
-                            <h4 className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>{u.name}</h4>
-                            <span className="text-[11px] font-semibold" style={{ color: 'var(--green)' }}>● Active Online</span>
+                            <h4 className="text-sm font-bold text-white">{u.name}</h4>
+                            <span className="text-[11px] font-semibold text-emerald-400">● Active Online</span>
                           </div>
                         </div>
                         <div className="flex gap-2">
-                          <button onClick={() => startCall(u, false)} className="app-btn app-btn-ghost px-4 py-2.5 rounded-xl border" style={{ color: 'var(--green)', borderColor: 'var(--green-dim)' }} title="Voice Call">
-                            <Phone size={17} /> <span className="hidden sm:inline text-xs font-bold">Voice Call</span>
+                          <button onClick={() => startCall(u, false)} className="neu-btn-circle !w-11 !h-11 text-emerald-400" title="Voice Call">
+                            <Phone size={17} />
                           </button>
-                          <button onClick={() => startCall(u, true)} className="app-btn app-btn-primary px-4 py-2.5 rounded-xl text-xs font-bold shadow-lg" title="Video Call">
-                            <Video size={17} /> <span className="hidden sm:inline text-xs font-bold">Video Call</span>
+                          <button onClick={() => startCall(u, true)} className="neu-btn-circle !w-11 !h-11 text-white" style={{ background: 'var(--accent)' }} title="Video Call">
+                            <Video size={17} />
                           </button>
                         </div>
                       </div>
@@ -1161,18 +1163,18 @@ export default function Home() {
           {/* ─── SUB-PAGE 3: FRIENDS SYSTEM ─────────────────────────────────── */}
           {screen === 'friends' && (
             <div className="flex-1 flex flex-col h-full overflow-hidden" style={{ background: 'var(--bg-main)' }}>
-              <div className="px-6 h-16 flex items-center justify-between shrink-0" style={{ borderBottom: '1px solid var(--border)', background: 'var(--bg-sidebar)' }}>
-                <h2 className="text-lg font-extrabold flex items-center gap-2.5" style={{ color: 'var(--text-primary)' }}>
-                  <Users size={20} style={{ color: 'var(--accent)' }} /> Friends & Network
+              <div className="px-6 h-20 flex items-center justify-between shrink-0" style={{ borderBottom: '1px solid var(--border)', background: 'var(--bg-sidebar)' }}>
+                <h2 className="text-xl font-extrabold flex items-center gap-2.5 text-white">
+                  <Users size={22} style={{ color: 'var(--accent)' }} /> Friends & Network
                 </h2>
                 <div className="flex gap-2">
-                  <button onClick={() => setFriendsTab('friends')} className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${friendsTab === 'friends' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-white'}`}>
+                  <button onClick={() => setFriendsTab('friends')} className={`px-4 py-2 rounded-full text-xs font-bold transition-all ${friendsTab === 'friends' ? 'bg-red-500 text-white shadow-md' : 'text-slate-400 hover:text-white'}`}>
                     Friends ({friends.length})
                   </button>
-                  <button onClick={() => setFriendsTab('requests')} className={`relative px-4 py-1.5 rounded-full text-xs font-bold transition-all ${friendsTab === 'requests' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-white'}`}>
+                  <button onClick={() => setFriendsTab('requests')} className={`relative px-4 py-2 rounded-full text-xs font-bold transition-all ${friendsTab === 'requests' ? 'bg-red-500 text-white shadow-md' : 'text-slate-400 hover:text-white'}`}>
                     Requests {friendRequests.length > 0 && <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] bg-red-500 text-white">{friendRequests.length}</span>}
                   </button>
-                  <button onClick={() => setFriendsTab('find')} className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all ${friendsTab === 'find' ? 'bg-blue-600 text-white shadow-md' : 'text-slate-400 hover:text-white'}`}>
+                  <button onClick={() => setFriendsTab('find')} className={`px-4 py-2 rounded-full text-xs font-bold transition-all ${friendsTab === 'find' ? 'bg-red-500 text-white shadow-md' : 'text-slate-400 hover:text-white'}`}>
                     Online Users ({others.length})
                   </button>
                 </div>
@@ -1183,27 +1185,27 @@ export default function Home() {
                 {friendsTab === 'friends' && (
                   <div>
                     {friendObjects.length === 0 ? (
-                      <div className="p-10 rounded-3xl text-center glass-panel">
-                        <UserCheck size={40} className="mx-auto mb-3 opacity-30" style={{ color: 'var(--text-muted)' }} />
-                        <p className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>No friends added yet</p>
-                        <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>Click "Online Users" tab to send friend requests!</p>
+                      <div className="neu-card p-10 text-center">
+                        <UserCheck size={40} className="mx-auto mb-3 opacity-30 text-slate-500" />
+                        <p className="text-sm font-bold text-white">No friends added yet</p>
+                        <p className="text-xs mt-1 text-slate-400">Click "Online Users" tab to send friend requests!</p>
                       </div>
                     ) : (
                       friendObjects.map((u) => (
-                        <div key={u.id} className="flex items-center justify-between p-4 rounded-2xl mb-3 glass-panel shadow-md">
+                        <div key={u.id} className="flex items-center justify-between p-4 rounded-2xl mb-3 neu-card">
                           <div className="flex items-center gap-3.5">
                             <img src={u.avatar} alt="" className="w-12 h-12 rounded-full object-cover" style={{ border: '2px solid var(--accent)' }} />
                             <div>
-                              <h4 className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>{u.name}</h4>
-                              <span className="text-[11px] font-semibold" style={{ color: 'var(--green)' }}>● Active Online</span>
+                              <h4 className="text-sm font-bold text-white">{u.name}</h4>
+                              <span className="text-[11px] font-semibold text-emerald-400">● Active Online</span>
                             </div>
                           </div>
                           <div className="flex gap-2">
-                            <button onClick={() => { setSelectedContact(u); setScreen('chats'); }} className="app-btn app-btn-ghost px-4 py-2 text-xs font-bold border" style={{ borderColor: 'var(--border)' }}>
-                              <MessageSquare size={15} /> Chat
+                            <button onClick={() => { setSelectedContact(u); setScreen('chats'); }} className="neu-btn-circle !w-11 !h-11 text-slate-300">
+                              <MessageSquare size={17} />
                             </button>
-                            <button onClick={() => startCall(u, true)} className="app-btn app-btn-primary px-4 py-2 text-xs font-bold shadow-md">
-                              <Video size={15} /> Call
+                            <button onClick={() => startCall(u, true)} className="neu-btn-circle !w-11 !h-11 text-white" style={{ background: 'var(--accent)' }}>
+                              <Video size={17} />
                             </button>
                           </div>
                         </div>
@@ -1216,18 +1218,18 @@ export default function Home() {
                 {friendsTab === 'requests' && (
                   <div>
                     {friendRequests.length === 0 ? (
-                      <div className="p-10 rounded-3xl text-center glass-panel">
-                        <UserPlus size={40} className="mx-auto mb-3 opacity-30" style={{ color: 'var(--text-muted)' }} />
-                        <p className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>No pending friend requests</p>
+                      <div className="neu-card p-10 text-center">
+                        <UserPlus size={40} className="mx-auto mb-3 opacity-30 text-slate-500" />
+                        <p className="text-sm font-bold text-white">No pending friend requests</p>
                       </div>
                     ) : (
                       friendRequests.map((u) => (
-                        <div key={u.id} className="flex items-center justify-between p-4 rounded-2xl mb-3 glass-panel shadow-md">
+                        <div key={u.id} className="flex items-center justify-between p-4 rounded-2xl mb-3 neu-card">
                           <div className="flex items-center gap-3.5">
                             <img src={u.avatar} alt="" className="w-12 h-12 rounded-full object-cover" style={{ border: '2px solid var(--accent)' }} />
                             <div>
-                              <h4 className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>{u.name}</h4>
-                              <span className="text-[11px] font-semibold" style={{ color: 'var(--accent)' }}>Sent you a friend request</span>
+                              <h4 className="text-sm font-bold text-white">{u.name}</h4>
+                              <span className="text-[11px] font-semibold text-red-400">Sent you a friend request</span>
                             </div>
                           </div>
                           <div className="flex gap-2">
@@ -1248,10 +1250,10 @@ export default function Home() {
                 {friendsTab === 'find' && (
                   <div>
                     {others.length === 0 ? (
-                      <div className="p-10 rounded-3xl text-center glass-panel">
-                        <UserSearch size={40} className="mx-auto mb-3 opacity-30" style={{ color: 'var(--text-muted)' }} />
-                        <p className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>No other users online right now</p>
-                        <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>Open another browser tab or share your link!</p>
+                      <div className="neu-card p-10 text-center">
+                        <UserSearch size={40} className="mx-auto mb-3 opacity-30 text-slate-500" />
+                        <p className="text-sm font-bold text-white">No other users online right now</p>
+                        <p className="text-xs mt-1 text-slate-400">Open another browser tab or share your link!</p>
                       </div>
                     ) : (
                       others.map((u) => {
@@ -1259,12 +1261,12 @@ export default function Home() {
                         const isSent = sentRequests.includes(u.id);
 
                         return (
-                          <div key={u.id} className="flex items-center justify-between p-4 rounded-2xl mb-3 glass-panel shadow-md">
+                          <div key={u.id} className="flex items-center justify-between p-4 rounded-2xl mb-3 neu-card">
                             <div className="flex items-center gap-3.5">
                               <img src={u.avatar} alt="" className="w-12 h-12 rounded-full object-cover" style={{ border: '2px solid var(--border)' }} />
                               <div>
-                                <h4 className="text-sm font-bold" style={{ color: 'var(--text-primary)' }}>{u.name}</h4>
-                                <span className="text-[11px] font-semibold" style={{ color: 'var(--green)' }}>● Active Online</span>
+                                <h4 className="text-sm font-bold text-white">{u.name}</h4>
+                                <span className="text-[11px] font-semibold text-emerald-400">● Active Online</span>
                               </div>
                             </div>
 
@@ -1294,18 +1296,18 @@ export default function Home() {
           {/* ─── SUB-PAGE 4: AI STUDIO ────────────────────────────────────── */}
           {screen === 'ai-studio' && (
             <div className="flex-1 flex flex-col h-full overflow-y-auto" style={{ background: 'var(--bg-main)' }}>
-              <div className="px-6 h-16 flex items-center shrink-0" style={{ borderBottom: '1px solid var(--border)', background: 'var(--bg-sidebar)' }}>
-                <h2 className="text-lg font-extrabold flex items-center gap-2.5" style={{ color: 'var(--text-primary)' }}>
-                  <Wand2 size={20} style={{ color: 'var(--accent)' }} /> AI Studio Workspace
+              <div className="px-6 h-20 flex items-center shrink-0" style={{ borderBottom: '1px solid var(--border)', background: 'var(--bg-sidebar)' }}>
+                <h2 className="text-xl font-extrabold flex items-center gap-2.5 text-white">
+                  <Wand2 size={22} style={{ color: 'var(--accent)' }} /> AI Studio Workspace
                 </h2>
               </div>
               <div className="flex-1 overflow-y-auto p-4 md:p-8">
                 <div className="max-w-3xl mx-auto space-y-6">
-                  <div className="p-6 rounded-3xl space-y-4 shadow-2xl glass-panel">
-                    <h3 className="text-sm font-bold flex items-center gap-2" style={{ color: 'var(--text-primary)' }}>
+                  <div className="neu-card p-6 space-y-4">
+                    <h3 className="text-sm font-bold flex items-center gap-2 text-white">
                       <Wand2 size={17} style={{ color: 'var(--accent)' }} /> Magic Message Polisher
                     </h3>
-                    <textarea rows={3} value={aiPolishInput} onChange={(e) => setAiPolishInput(e.target.value)} placeholder="Draft rough text here..." className="app-input text-xs resize-none" />
+                    <textarea rows={3} value={aiPolishInput} onChange={(e) => setAiPolishInput(e.target.value)} placeholder="Draft rough text here..." className="neu-input text-xs resize-none w-full" />
                     <button onClick={async () => {
                       if (!aiPolishInput.trim()) return;
                       setIsAiThinking(true);
@@ -1316,7 +1318,7 @@ export default function Home() {
                       Rephrase Text
                     </button>
                     {aiPolishOutput && (
-                      <div className="p-5 rounded-2xl text-xs leading-relaxed font-medium" style={{ background: 'var(--accent-dim)', color: 'var(--text-primary)', border: '1px solid var(--accent)' }}>
+                      <div className="p-5 rounded-2xl text-xs leading-relaxed font-medium bg-red-500/10 border border-red-500/30 text-white">
                         {aiPolishOutput}
                       </div>
                     )}
@@ -1329,62 +1331,62 @@ export default function Home() {
           {/* ─── SUB-PAGE 5: PROFILE ────────────────────────────────────── */}
           {screen === 'profile' && (
             <div className="flex-1 flex flex-col h-full overflow-y-auto" style={{ background: 'var(--bg-main)' }}>
-              <div className="px-6 h-16 flex items-center justify-between shrink-0" style={{ borderBottom: '1px solid var(--border)', background: 'var(--bg-sidebar)' }}>
-                <h2 className="text-lg font-extrabold flex items-center gap-2.5" style={{ color: 'var(--text-primary)' }}>
-                  <UserIcon size={20} style={{ color: 'var(--accent)' }} /> User Profile
+              <div className="px-6 h-20 flex items-center justify-between shrink-0" style={{ borderBottom: '1px solid var(--border)', background: 'var(--bg-sidebar)' }}>
+                <h2 className="text-xl font-extrabold flex items-center gap-2.5 text-white">
+                  <UserIcon size={22} style={{ color: 'var(--accent)' }} /> User Profile
                 </h2>
-                <button onClick={handleLogout} className="app-btn app-btn-ghost px-3 py-1.5 text-xs text-red-400 hover:bg-red-500/20 border border-red-500/30">
+                <button onClick={handleLogout} className="app-btn px-4 py-2 text-xs font-bold bg-red-600/20 text-red-400 border border-red-500/40 hover:bg-red-600 hover:text-white">
                   <LogOut size={15} /> Logout
                 </button>
               </div>
               <div className="flex-1 overflow-y-auto p-4 md:p-8">
-                <div className="max-w-2xl mx-auto p-8 rounded-3xl flex items-center justify-between shadow-2xl glass-panel">
+                <div className="max-w-2xl mx-auto p-8 rounded-3xl flex items-center justify-between neu-card">
                   <div className="flex items-center gap-6">
                     <img src={registeredUser.avatar} alt="" className="w-24 h-24 rounded-full object-cover shadow-2xl" style={{ border: '4px solid var(--accent)' }} />
                     <div>
-                      <h3 className="text-2xl font-extrabold" style={{ color: 'var(--text-primary)' }}>{registeredUser.name}</h3>
-                      <p className="text-xs mt-1 font-medium" style={{ color: 'var(--text-muted)' }}>{userBio}</p>
-                      <span className="inline-block mt-3 px-3.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider text-white shadow-md" style={{ background: 'linear-gradient(135deg, var(--accent), var(--purple))' }}>
+                      <h3 className="text-2xl font-extrabold text-white">{registeredUser.name}</h3>
+                      <p className="text-xs mt-1 font-medium text-slate-400">{userBio}</p>
+                      <span className="inline-block mt-3 px-3.5 py-1 rounded-full text-[10px] font-extrabold uppercase tracking-wider text-white shadow-md" style={{ background: 'var(--accent)' }}>
                         WebRTC Pro Member
                       </span>
                     </div>
                   </div>
-                  <button onClick={handleLogout} className="app-btn px-4 py-2 text-xs font-bold bg-red-600/20 text-red-400 border border-red-500/40 hover:bg-red-600 hover:text-white">
-                    <LogOut size={16} /> Logout
+                  <button onClick={handleLogout} className="neu-btn-circle !w-12 !h-12 text-red-400" title="Logout">
+                    <LogOut size={18} />
                   </button>
                 </div>
               </div>
             </div>
           )}
 
-          {/* ─── SUB-PAGE 6: SETTINGS ────────────────────────────────────── */}
+          {/* ─── SUB-PAGE 6: SETTINGS (Includes 8 Image 2 Themes) ──────────── */}
           {screen === 'settings' && (
             <div className="flex-1 flex flex-col h-full overflow-y-auto" style={{ background: 'var(--bg-main)' }}>
-              <div className="px-6 h-16 flex items-center justify-between shrink-0" style={{ borderBottom: '1px solid var(--border)', background: 'var(--bg-sidebar)' }}>
-                <h2 className="text-lg font-extrabold flex items-center gap-2.5" style={{ color: 'var(--text-primary)' }}>
-                  <Settings size={20} style={{ color: 'var(--accent)' }} /> Settings & Preferences
+              <div className="px-6 h-20 flex items-center justify-between shrink-0" style={{ borderBottom: '1px solid var(--border)', background: 'var(--bg-sidebar)' }}>
+                <h2 className="text-xl font-extrabold flex items-center gap-2.5 text-white">
+                  <Settings size={22} style={{ color: 'var(--accent)' }} /> Settings & Preferences
                 </h2>
-                <button onClick={handleLogout} className="app-btn app-btn-ghost px-3 py-1.5 text-xs text-red-400 hover:bg-red-500/20 border border-red-500/30">
+                <button onClick={handleLogout} className="app-btn px-4 py-2 text-xs font-bold bg-red-600/20 text-red-400 border border-red-500/40 hover:bg-red-600 hover:text-white">
                   <LogOut size={15} /> Logout
                 </button>
               </div>
-              <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-6 max-w-2xl mx-auto w-full">
-                <div className="p-6 rounded-3xl space-y-4 shadow-2xl glass-panel">
-                  <h3 className="text-xs font-bold uppercase tracking-wider" style={{ color: 'var(--text-secondary)' }}>Appearance Theme</h3>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-6 max-w-3xl mx-auto w-full">
+                <div className="neu-card p-6 space-y-4">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">Appearance Color Palette</h3>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                     {THEMES.map((t) => (
-                      <button key={t.key} onClick={() => setTheme(t.key)} className="flex flex-col items-center gap-2 p-4 rounded-2xl transition-all hover:scale-105" style={{ background: theme === t.key ? 'var(--accent-dim)' : 'var(--bg-surface)', border: `2px solid ${theme === t.key ? 'var(--accent)' : 'transparent'}` }}>
-                        <div className="w-8 h-8 rounded-full shadow-lg" style={{ background: t.dot }} />
-                        <span className="text-[11px] font-bold" style={{ color: theme === t.key ? 'var(--accent)' : 'var(--text-muted)' }}>{t.label}</span>
+                      <button key={t.key} onClick={() => setTheme(t.key)} className="flex items-center gap-3 p-3.5 rounded-2xl transition-all hover:scale-105" style={{ background: theme === t.key ? 'var(--accent-dim)' : 'var(--bg-sidebar)', border: `2px solid ${theme === t.key ? 'var(--accent)' : 'transparent'}` }}>
+                        <div className="w-8 h-8 rounded-xl shadow-lg shrink-0" style={{ background: t.grad }} />
+                        <span className="text-[11px] font-bold text-left text-white leading-tight">{t.label}</span>
                       </button>
                     ))}
                   </div>
                 </div>
 
-                <div className="p-6 rounded-3xl space-y-4 shadow-2xl glass-panel">
+                <div className="neu-card p-6 space-y-4">
                   <h3 className="text-xs font-bold uppercase tracking-wider text-red-400">Account Session</h3>
                   <p className="text-xs text-slate-400">Log out of your current session on this browser.</p>
-                  <button onClick={handleLogout} className="app-btn px-5 py-2.5 text-xs font-bold bg-red-600 text-white shadow-lg">
+                  <button onClick={handleLogout} className="app-btn px-6 py-3 text-xs font-bold bg-red-600 text-white shadow-lg">
                     <LogOut size={16} /> Sign Out of Account
                   </button>
                 </div>
@@ -1392,8 +1394,8 @@ export default function Home() {
             </div>
           )}
 
-          {/* MOBILE NAVIGATION BAR */}
-          <nav className="md:hidden flex items-center justify-around h-16 shrink-0 z-40" style={{ background: 'var(--bg-sidebar)', borderTop: '1px solid var(--border)' }}>
+          {/* MOBILE NAVIGATION BAR (Matching Image 1 Neumorphic Floating Nav) */}
+          <nav className="md:hidden flex items-center justify-around h-18 shrink-0 z-40 p-2" style={{ background: 'var(--bg-sidebar)', borderTop: '1px solid var(--border)' }}>
             {([
               { key: 'chats' as Screen, icon: MessageSquare, label: 'Chats' },
               { key: 'calls' as Screen, icon: PhoneCall, label: 'Calls' },
@@ -1404,9 +1406,9 @@ export default function Home() {
             ]).map((nav) => {
               const active = screen === nav.key;
               return (
-                <button key={nav.key} onClick={() => { setScreen(nav.key); if (nav.key !== 'chats') setSelectedContact(null); }} className="flex flex-col items-center justify-center gap-1 py-1 px-2 rounded-xl transition-all" style={{ color: active ? 'var(--accent)' : 'var(--text-muted)' }}>
-                  <nav.icon size={20} />
-                  <span className="text-[9px] font-bold">{nav.label}</span>
+                <button key={nav.key} onClick={() => { setScreen(nav.key); if (nav.key !== 'chats') setSelectedContact(null); }}
+                  className={`neu-btn-circle !w-11 !h-11 flex-col gap-0.5 ${active ? '!bg-red-500 text-white' : 'text-slate-400'}`}>
+                  <nav.icon size={19} />
                 </button>
               );
             })}

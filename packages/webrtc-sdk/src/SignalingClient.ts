@@ -34,6 +34,10 @@ export type EventMap = {
   'call:busy': (payload: { targetUserId: string; targetUserName: string; message: string }) => void;
   'call:missed': (payload: { caller: User; timestamp: number }) => void;
   'presence:update': (users: User[]) => void;
+  'friend:request': (payload: { from: User }) => void;
+  'friend:accept': (payload: { from: User }) => void;
+  'friend:reject': (payload: { fromUserId: string }) => void;
+  'call:invite': (payload: { roomId: string; inviter: User; isVideo: boolean }) => void;
   'connected': () => void;
   'disconnected': (reason: string) => void;
 };
@@ -158,6 +162,18 @@ export class SignalingClient {
         break;
       case 'room:user-left':
         this.emitLocal('room:user-left', evt.payload);
+        break;
+      case 'friend:request':
+        this.emitLocal('friend:request', evt.payload);
+        break;
+      case 'friend:accept':
+        this.emitLocal('friend:accept', evt.payload);
+        break;
+      case 'friend:reject':
+        this.emitLocal('friend:reject', evt.payload);
+        break;
+      case 'call:invite':
+        this.emitLocal('call:invite', evt.payload);
         break;
     }
   }
@@ -323,6 +339,34 @@ export class SignalingClient {
       this.postServerlessSignal('call:ended', undefined, roomId, {
         roomId,
         endedBy: this.currentUser.id
+      });
+    }
+  }
+
+  public sendFriendRequest(targetUserId: string) {
+    if (this.currentUser) {
+      this.postServerlessSignal('friend:request', targetUserId, undefined, { from: this.currentUser });
+    }
+  }
+
+  public acceptFriendRequest(targetUserId: string) {
+    if (this.currentUser) {
+      this.postServerlessSignal('friend:accept', targetUserId, undefined, { from: this.currentUser });
+    }
+  }
+
+  public rejectFriendRequest(targetUserId: string) {
+    if (this.currentUser) {
+      this.postServerlessSignal('friend:reject', targetUserId, undefined, { fromUserId: this.currentUser.id });
+    }
+  }
+
+  public inviteToCall(targetUserId: string, roomId: string, isVideo: boolean) {
+    if (this.currentUser) {
+      this.postServerlessSignal('call:invite', targetUserId, roomId, {
+        roomId,
+        inviter: this.currentUser,
+        isVideo
       });
     }
   }

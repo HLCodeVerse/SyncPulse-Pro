@@ -241,12 +241,26 @@ export class PeerConnectionManager {
         track.enabled = !muted;
       });
     }
+    for (const pc of this.peerConnections.values()) {
+      pc.getSenders().forEach((sender) => {
+        if (sender.track && sender.track.kind === 'audio') {
+          sender.track.enabled = !muted;
+        }
+      });
+    }
   }
 
   public setVideoMuted(muted: boolean) {
     if (this.localStream) {
       this.localStream.getVideoTracks().forEach((track) => {
         track.enabled = !muted;
+      });
+    }
+    for (const pc of this.peerConnections.values()) {
+      pc.getSenders().forEach((sender) => {
+        if (sender.track && sender.track.kind === 'video') {
+          sender.track.enabled = !muted;
+        }
       });
     }
   }

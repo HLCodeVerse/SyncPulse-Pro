@@ -1,7 +1,4 @@
-/* Supabase REST API & Database Management Helpers */
-
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL || 'https://fbgwhkgvrfutahjjuwct.supabase.co';
-const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '';
+/* Supabase Server API & Database Management Helpers */
 
 export interface DbUser {
   id: string;
@@ -31,26 +28,16 @@ export interface DbMessage {
 }
 
 export async function syncUserIdentity(user: { id: string; name: string; username?: string; phone?: string; avatar?: string; bio?: string; role?: 'user' | 'admin' }) {
-  if (!SUPABASE_ANON_KEY) return null;
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/users`, {
+    const res = await fetch('/api/auth/register', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey': SUPABASE_ANON_KEY,
-        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-        'Prefer': 'resolution=merge-duplicates'
-      },
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        id: user.id,
-        full_name: user.name,
+        fullName: user.name,
         username: user.username || user.name.toLowerCase().replace(/\s+/g, '_'),
-        phone_number: user.phone || null,
-        avatar_url: user.avatar,
-        bio: user.bio || 'SyncPulse Pro Enterprise User',
-        role: user.role || 'user',
-        status: 'online',
-        last_seen: new Date().toISOString()
+        phone: user.phone,
+        avatarUrl: user.avatar,
+        bio: user.bio || 'SyncPulse Pro Enterprise User'
       })
     });
     return res.ok;
@@ -60,166 +47,104 @@ export async function syncUserIdentity(user: { id: string; name: string; usernam
 }
 
 export async function fetchFriendsFromDb(userId: string): Promise<string[]> {
-  if (!SUPABASE_ANON_KEY) return [];
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/friendships?or=(user_id_1.eq.${userId},user_id_2.eq.${userId})&status=eq.accepted`, {
-      headers: {
-        'apikey': SUPABASE_ANON_KEY,
-        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
-      }
-    });
+    const res = await fetch(`/api/friendships?userId=${userId}`);
     if (!res.ok) return [];
     const data = await res.json();
-    return data.map((f: any) => f.user_id_1 === userId ? f.user_id_2 : f.user_id_1);
+    return data.acceptedFriends ? data.acceptedFriends.map((f: any) => f.id) : [];
   } catch (e) {
     return [];
   }
 }
 
 export async function saveFriendshipToDb(userId1: string, userId2: string, status: 'pending' | 'accepted' | 'rejected' = 'accepted') {
-  if (!SUPABASE_ANON_KEY) return;
   try {
-    const [u1, u2] = [userId1, userId2].sort();
-    await fetch(`${SUPABASE_URL}/rest/v1/friendships`, {
+    await fetch('/api/friendships', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey': SUPABASE_ANON_KEY,
-        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`,
-        'Prefer': 'resolution=merge-duplicates'
-      },
-      body: JSON.stringify({
-        user_id_1: u1,
-        user_id_2: u2,
-        status,
-        action_user_id: userId1,
-        updated_at: new Date().toISOString()
-      })
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: status === 'accepted' ? 'accept' : 'send', senderId: userId1, targetId: userId2 })
     });
   } catch (e) {}
 }
 
 export async function saveMessageToDb(msg: { id: string; roomId: string; senderId: string; text: string }) {
-  if (!SUPABASE_ANON_KEY) return;
   try {
-    await fetch(`${SUPABASE_URL}/rest/v1/messages`, {
+    await fetch('/api/messages', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey': SUPABASE_ANON_KEY,
-        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
-      },
-      body: JSON.stringify({
-        id: msg.id,
-        room_id: msg.roomId,
-        sender_id: msg.senderId,
-        text: msg.text
-      })
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(msg)
     });
   } catch (e) {}
 }
 
 export async function fetchRoomMessagesFromDb(roomId: string): Promise<DbMessage[]> {
-  if (!SUPABASE_ANON_KEY) return [];
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/messages?room_id=eq.${encodeURIComponent(roomId)}&order=created_at.asc`, {
-      headers: {
-        'apikey': SUPABASE_ANON_KEY,
-        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
-      }
-    });
+    const res = await fetch(`/api/messages?roomId=${encodeURIComponent(roomId)}`);
     if (!res.ok) return [];
-    return await res.json();
+    const data = await res.json();
+    return data.messages || [];
   } catch (e) {
     return [];
   }
 }
 
+export async function deleteMessageFromDb(msgId: string) {
+  try {
+    await fetch(`/api/messages?messageId=${encodeURIComponent(msgId)}`, {
+      method: 'DELETE'
+    });
+  } catch (e) {}
+}
+
 /* ADMIN DASHBOARD DB HELPERS */
 export async function fetchAllUsersFromDb(): Promise<DbUser[]> {
-  if (!SUPABASE_ANON_KEY) return [];
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/users?select=*&order=created_at.desc`, {
-      headers: {
-        'apikey': SUPABASE_ANON_KEY,
-        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
-      }
-    });
+    const res = await fetch('/api/admin/users');
     if (!res.ok) return [];
-    return await res.json();
+    const data = await res.json();
+    return data.users || [];
   } catch (e) {
     return [];
   }
 }
 
 export async function fetchAllMessagesFromDb(): Promise<DbMessage[]> {
-  if (!SUPABASE_ANON_KEY) return [];
   try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/messages?select=*&order=created_at.desc&limit=50`, {
-      headers: {
-        'apikey': SUPABASE_ANON_KEY,
-        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
-      }
-    });
+    const res = await fetch('/api/messages?roomId=all');
     if (!res.ok) return [];
-    return await res.json();
+    const data = await res.json();
+    return data.messages || [];
   } catch (e) {
     return [];
   }
 }
 
 export async function updateUserRoleInDb(userId: string, newRole: 'user' | 'admin') {
-  if (!SUPABASE_ANON_KEY) return;
   try {
-    await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${userId}`, {
-      method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey': SUPABASE_ANON_KEY,
-        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
-      },
-      body: JSON.stringify({ role: newRole })
+    await fetch('/api/admin/users', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'updateRole', userId, role: newRole })
     });
   } catch (e) {}
 }
 
 export async function toggleUserSuspensionInDb(userId: string, isSuspended: boolean) {
-  if (!SUPABASE_ANON_KEY) return;
   try {
-    await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${userId}`, {
-      method: 'PATCH',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey': SUPABASE_ANON_KEY,
-        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
-      },
-      body: JSON.stringify({ is_suspended: isSuspended })
+    await fetch('/api/admin/users', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'toggleSuspension', userId, isSuspended })
     });
   } catch (e) {}
 }
 
 export async function deleteUserFromDb(userId: string) {
-  if (!SUPABASE_ANON_KEY) return;
   try {
-    await fetch(`${SUPABASE_URL}/rest/v1/users?id=eq.${userId}`, {
-      method: 'DELETE',
-      headers: {
-        'apikey': SUPABASE_ANON_KEY,
-        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
-      }
-    });
-  } catch (e) {}
-}
-
-export async function deleteMessageFromDb(messageId: string) {
-  if (!SUPABASE_ANON_KEY) return;
-  try {
-    await fetch(`${SUPABASE_URL}/rest/v1/messages?id=eq.${messageId}`, {
-      method: 'DELETE',
-      headers: {
-        'apikey': SUPABASE_ANON_KEY,
-        'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
-      }
+    await fetch('/api/admin/users', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'deleteUser', userId })
     });
   } catch (e) {}
 }

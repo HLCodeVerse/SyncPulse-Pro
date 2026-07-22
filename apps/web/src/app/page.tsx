@@ -596,8 +596,7 @@ export default function Home() {
     if (!content || !selectedContact || !registeredUser) return;
 
     if (selectedContact.id !== AI_BOT_USER.id && !isFriend(selectedContact.id)) {
-      alert(`Send a friend request to ${selectedContact.name} to start messaging.`);
-      return;
+      sendFriendRequest(selectedContact);
     }
 
     if (editingMessage) {
@@ -767,9 +766,9 @@ export default function Home() {
     return 0;
   });
 
-  /* Strictly ONLY ACCEPTED Friends (and PulseAI) can message or call */
+  /* All Database Users in Contacts List, sorted ACTIVE ONLINE FIRST */
   const acceptedFriendObjects = sortedDbUsers.filter(u => friends.includes(u.id));
-  const contactsList = [AI_BOT_USER, ...acceptedFriendObjects];
+  const contactsList = [AI_BOT_USER, ...sortedDbUsers];
   const filteredContacts = contactsList.filter((c) => c.name.toLowerCase().includes(searchQuery.toLowerCase()));
 
   const dmRoomId = selectedContact && registeredUser

@@ -751,20 +751,55 @@ export default function Home() {
     setDbMessagesList(prev => prev.filter(m => m.id !== msgId));
   };
 
-  /* Online & Cached Friend Contacts with Live Status */
-  const others = onlineUsers.filter((u) => u.id !== registeredUser?.id);
-  const friendUserObjects: User[] = friends.map(id => {
-    const online = others.find(u => u.id === id);
-    const cached = friendProfiles[id];
-    return {
-      id,
-      name: online?.name || cached?.name || `Friend ${id.slice(-4)}`,
-      avatar: online?.avatar || cached?.avatar || AVATAR_PRESETS[0],
-      status: (online ? 'online' : 'offline') as 'online' | 'offline' | 'in-call'
+  // Real-time Database Users List
+  const [allDbUsers, setAllDbUsers] = useState<User[]>([]);
+
+  /* Poll Database Users & Send Heartbeat to Database */
+  useEffect(() => {
+    if (!registeredUser) return;
+
+    const sendHeartbeat = async () => {
+      try {
+        await fetch('/api/users/heartbeat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: registeredUser.id })
+        });
+      } catch (e) {}
     };
+
+    const fetchUsers = async () => {
+      try {
+        const res = await fetch(`/api/users?currentUserId=${registeredUser.id}`);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.users) {
+            setAllDbUsers(data.users);
+          }
+        }
+      } catch (e) {}
+    };
+
+    sendHeartbeat();
+    fetchUsers();
+
+    const interval = setInterval(() => {
+      sendHeartbeat();
+      fetchUsers();
+    }, 4000);
+
+    return () => clearInterval(interval);
+  }, [registeredUser]);
+
+  /* Database Users excluding current user, sorted ACTIVE ONLINE FIRST */
+  const dbUsersExcludingSelf = allDbUsers.filter((u) => u.id !== registeredUser?.id);
+  const sortedDbUsers = [...dbUsersExcludingSelf].sort((a, b) => {
+    if (a.status === 'online' && b.status !== 'online') return -1;
+    if (a.status !== 'online' && b.status === 'online') return 1;
+    return 0;
   });
 
-  const contactsList = [AI_BOT_USER, ...friendUserObjects];
+  const contactsList = [AI_BOT_USER, ...sortedDbUsers];
   const filteredContacts = contactsList.filter((c) => c.name.toLowerCase().includes(searchQuery.toLowerCase()));
 
   const dmRoomId = selectedContact && registeredUser
@@ -1096,7 +1131,7 @@ export default function Home() {
           {screen === 'friends' && (
             <FriendsView
               friendsTab={friendsTab} setFriendsTab={setFriendsTab}
-              others={others} friendUserObjects={friendUserObjects}
+              others={sortedDbUsers} friendUserObjects={sortedDbUsers}
               friendRequests={friendRequests} sentRequests={sentRequests}
               isFriend={isFriend} sendFriendRequest={sendFriendRequest}
               acceptFriendRequest={acceptFriendRequest} rejectFriendRequest={rejectFriendRequest}

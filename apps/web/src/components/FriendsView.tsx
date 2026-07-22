@@ -55,7 +55,9 @@ export function FriendsView({
                     <img src={u.avatar} alt="" className="w-8 h-8 rounded-full object-cover ring-1 ring-white/10" />
                     <div>
                       <h4 className="text-xs font-bold text-white">{u.name}</h4>
-                      <span className="text-[10px] text-emerald-400">● Active Online</span>
+                      <span className={`text-[10px] ${u.status === 'online' ? 'text-emerald-400 font-semibold' : 'text-slate-500'}`}>
+                        {u.status === 'online' ? '● Active Online' : 'Offline'}
+                      </span>
                     </div>
                   </div>
                   {isAlreadyFriend ? (

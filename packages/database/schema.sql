@@ -117,10 +117,18 @@ ALTER TABLE public.messages ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.call_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.system_settings ENABLE ROW LEVEL SECURITY;
 
+DROP POLICY IF EXISTS "Allow All Users Select" ON public.users;
+DROP POLICY IF EXISTS "Allow Users Insert Update Self" ON public.users;
+DROP POLICY IF EXISTS "Allow Friendship Operations" ON public.friendships;
+DROP POLICY IF EXISTS "Allow Room Operations" ON public.rooms;
+DROP POLICY IF EXISTS "Allow Room Participant Operations" ON public.room_participants;
+DROP POLICY IF EXISTS "Allow Message Operations" ON public.messages;
+DROP POLICY IF EXISTS "Allow Call Log Operations" ON public.call_logs;
+DROP POLICY IF EXISTS "Allow System Settings Operations" ON public.system_settings;
+
 -- Permissive policies for application operation
 CREATE POLICY "Allow All Users Select" ON public.users FOR SELECT USING (true);
 CREATE POLICY "Allow Users Insert Update Self" ON public.users FOR ALL USING (true);
-
 CREATE POLICY "Allow Friendship Operations" ON public.friendships FOR ALL USING (true);
 CREATE POLICY "Allow Room Operations" ON public.rooms FOR ALL USING (true);
 CREATE POLICY "Allow Room Participant Operations" ON public.room_participants FOR ALL USING (true);

@@ -17,22 +17,25 @@ export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
   const userId = searchParams.get('userId');
   const since = parseInt(searchParams.get('since') || '0', 10);
+  const now = Date.now();
 
   if (userId && activeUsersMap.has(userId)) {
     const existing = activeUsersMap.get(userId);
-    activeUsersMap.set(userId, { ...existing, status: 'online', lastSeen: new Date().toISOString() });
+    activeUsersMap.set(userId, { ...existing, status: 'online', lastSeen: new Date().toISOString(), timestamp: now });
   }
 
-  // Prune stale users inactive for > 30s
-  const now = Date.now();
-  for (const [id, user] of activeUsersMap.entries()) {
-    if (user.lastSeen && now - new Date(user.lastSeen).getTime() > 30000) {
-      activeUsersMap.delete(id);
+  // Extract active users from presence events in eventBus (last 60 seconds)
+  const activeMap = new Map<string, any>(activeUsersMap);
+  eventBus.forEach((e) => {
+    if (e.type === 'user:presence' && e.payload && now - e.timestamp < 60000) {
+      activeMap.set(e.payload.id, { ...e.payload, status: 'online' });
     }
-  }
+  });
+
+  const activeUsers = Array.from(activeMap.values());
 
   if (!userId) {
-    return NextResponse.json({ activeUsers: Array.from(activeUsersMap.values()), events: [] });
+    return NextResponse.json({ activeUsers, events: [] });
   }
 
   // Filter events targeted to this user or room broadcast since timestamp
@@ -41,7 +44,7 @@ export async function GET(req: NextRequest) {
   );
 
   return NextResponse.json({
-    activeUsers: Array.from(activeUsersMap.values()),
+    activeUsers,
     events,
     timestamp: Date.now()
   });
@@ -53,7 +56,18 @@ export async function POST(req: NextRequest) {
     const { action, user, event } = body;
 
     if (action === 'register' && user) {
-      activeUsersMap.set(user.id, { ...user, status: 'online', lastSeen: new Date().toISOString() });
+      activeUsersMap.set(user.id, { ...user, status: 'online', lastSeen: new Date().toISOString(), timestamp: Date.now() });
+      
+      // Also broadcast presence event so all serverless instances discover this user
+      eventBus.push({
+        id: `pres_${user.id}_${Date.now()}`,
+        type: 'user:presence',
+        payload: { ...user, status: 'online' },
+        senderId: user.id,
+        timestamp: Date.now()
+      });
+      if (eventBus.length > 500) eventBus.shift();
+
       return NextResponse.json({ success: true, user });
     }
 

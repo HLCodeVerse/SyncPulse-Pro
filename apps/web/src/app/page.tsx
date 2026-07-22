@@ -22,7 +22,7 @@ import {
   Search, Send, CheckCheck, Check, ArrowLeft, Settings, LogOut, Users, Zap,
   X, Sparkles, Hash, Edit2, Bot, Wand2, Globe2, ShieldCheck,
   Pin, File, PhoneCall, User as UserIcon, UserPlus, UserCheck, UserSearch,
-  Activity, Plus, Camera, Smile, Paperclip
+  Activity, Plus, Camera, Smile, Paperclip, Lock, Radio
 } from 'lucide-react';
 import { askGemini, generateSmartReplies, summarizeChatHistory, rephraseText, translateText } from '../lib/aiService';
 
@@ -101,10 +101,10 @@ function playSound(type: 'message' | 'ring' | 'dial') {
 export default function Home() {
   // Splash & Session state
   const [showSplash, setShowSplash] = useState(true);
-  const [splashProgress, setSplashProgress] = useState(20);
+  const [splashProgress, setSplashProgress] = useState(25);
   const [userName, setUserName] = useState('');
   const [selectedAvatar, setSelectedAvatar] = useState(AVATAR_PRESETS[0]);
-  const [userBio, setUserBio] = useState('Senior WebRTC & UI Architect.');
+  const [userBio, setUserBio] = useState('Senior WebRTC & Neumorphic Architect.');
   const [registeredUser, setRegisteredUser] = useState<User | null>(null);
   const [onlineUsers, setOnlineUsers] = useState<User[]>([]);
 
@@ -117,7 +117,7 @@ export default function Home() {
   const [friends, setFriends] = useState<string[]>([]);
   const [friendRequests, setFriendRequests] = useState<User[]>([]);
   const [sentRequests, setSentRequests] = useState<string[]>([]);
-  const [friendsTab, setFriendsTab] = useState<'friends' | 'requests' | 'find'>('friends');
+  const [friendsTab, setFriendsTab] = useState<'friends' | 'requests' | 'find'>('find');
 
   const [theme, setTheme] = useState<string>(() => {
     if (typeof window !== 'undefined') return localStorage.getItem('pulse_theme') || 'coral-dark';
@@ -172,9 +172,9 @@ export default function Home() {
 
   /* ── 1. Splash Screen Loader ───────────────────────────────────────── */
   useEffect(() => {
-    const timer1 = setTimeout(() => setSplashProgress(65), 350);
-    const timer2 = setTimeout(() => setSplashProgress(100), 900);
-    const timer3 = setTimeout(() => setShowSplash(false), 1400);
+    const timer1 = setTimeout(() => setSplashProgress(70), 300);
+    const timer2 = setTimeout(() => setSplashProgress(100), 800);
+    const timer3 = setTimeout(() => setShowSplash(false), 1200);
     return () => { clearTimeout(timer1); clearTimeout(timer2); clearTimeout(timer3); };
   }, []);
 
@@ -575,21 +575,6 @@ export default function Home() {
     handleSendMessage(`🎵 Voice Note (${recordingSeconds}s)`);
   };
 
-  const handleInlineEnhance = async (mode: 'polish' | 'professional' | 'concise' | 'translate') => {
-    if (!inputText.trim()) return;
-    setShowAiEnhancerMenu(false);
-    setIsAiThinking(true);
-
-    let enhanced = '';
-    if (mode === 'polish') enhanced = await rephraseText(inputText.trim(), 'fluent');
-    else if (mode === 'professional') enhanced = await rephraseText(inputText.trim(), 'professional');
-    else if (mode === 'concise') enhanced = await rephraseText(inputText.trim(), 'concise');
-    else if (mode === 'translate') enhanced = await translateText(inputText.trim(), 'Spanish');
-
-    setIsAiThinking(false);
-    if (enhanced) setInputText(enhanced);
-  };
-
   const handleAddReaction = (messageId: string, emoji: string) => {
     if (!selectedContact || !registeredUser) return;
     setChatMessages(prev => prev.map(m => {
@@ -652,7 +637,7 @@ export default function Home() {
      ════════════════════════════════════════════════════════════════════════ */
   if (showSplash) {
     return (
-      <div className="h-full w-full flex flex-col items-center justify-center relative overflow-hidden anim-fade" style={{ background: '#181a20' }}>
+      <div className="fixed inset-0 w-screen h-screen flex flex-col items-center justify-center relative overflow-hidden anim-fade z-50" style={{ background: '#181a20' }}>
         <div className="relative z-10 flex flex-col items-center text-center p-6 max-w-sm w-full">
           <div className="relative mb-6">
             <div className="absolute -inset-4 rounded-3xl bg-red-500/20 blur-xl anim-ring" />
@@ -664,7 +649,7 @@ export default function Home() {
           <h1 className="text-3xl font-black tracking-tight text-white mb-1">
             SyncPulse <span className="text-red-500">Pro</span>
           </h1>
-          <p className="text-xs text-slate-400 font-medium mb-8">Enterprise WebRTC & Neumorphic Communication Network</p>
+          <p className="text-xs text-slate-400 font-medium mb-8">Enterprise WebRTC & Neumorphic Network</p>
 
           <div className="w-full bg-slate-800/80 h-2 rounded-full overflow-hidden border border-slate-700/50 p-0.5 shadow-inner mb-3">
             <div className="h-full bg-gradient-to-r from-red-500 to-rose-600 rounded-full transition-all duration-700 ease-out" style={{ width: `${splashProgress}%` }} />
@@ -680,44 +665,103 @@ export default function Home() {
   }
 
   /* ════════════════════════════════════════════════════════════════════════
-     2. NEUMORPHIC ANIMATED SIGN IN SCREEN (Matching Image 1 Aesthetic)
+     2. IMMERSIVE FULL-SCREEN NATIVE APP SIGN-IN (Fixes website-box login)
      ════════════════════════════════════════════════════════════════════════ */
   if (!registeredUser) {
     return (
-      <div className="h-full w-full flex items-center justify-center relative overflow-hidden" style={{ background: 'var(--bg-app)' }}>
-        <form onSubmit={handleRegister} className="relative z-10 w-full max-w-md mx-4 anim-scale neu-card p-8 md:p-10">
-          <div className="flex flex-col items-center mb-8">
-            <div className="neu-btn-circle w-20 h-20 mb-4" style={{ background: 'linear-gradient(135deg, #ff4747, #e03232)', border: 'none' }}>
-              <Zap size={36} className="text-white" />
+      <div className="fixed inset-0 w-screen h-screen flex flex-col lg:flex-row overflow-hidden z-50" style={{ background: 'var(--bg-app)' }}>
+        {/* Left Hero Canvas (Desktop/Tablet) */}
+        <div className="hidden lg:flex w-1/2 h-full flex-col justify-between p-16 relative overflow-hidden" style={{ background: 'linear-gradient(135deg, rgba(255, 71, 71, 0.15), var(--bg-sidebar))', borderRight: '1px solid var(--border)' }}>
+          <div className="absolute top-1/3 left-1/3 w-96 h-96 rounded-full blur-3xl opacity-20 anim-float" style={{ background: 'var(--accent)' }} />
+
+          <div className="relative z-10 flex items-center gap-3">
+            <div className="neu-btn-circle !w-12 !h-12 text-white" style={{ background: 'var(--accent)' }}>
+              <Zap size={24} />
             </div>
-            <h1 className="text-3xl font-black tracking-tight" style={{ color: 'var(--text-primary)' }}>SyncPulse Pro</h1>
-            <p className="text-xs mt-1 text-center font-semibold" style={{ color: 'var(--text-muted)' }}>Neumorphic WebRTC & AI Workspace</p>
+            <h2 className="text-2xl font-black text-white">SyncPulse <span className="text-red-500">Pro</span></h2>
           </div>
 
-          <div className="mb-6">
-            <label className="block text-[11px] font-bold uppercase tracking-wider mb-3 text-center" style={{ color: 'var(--text-muted)' }}>Choose Profile Avatar</label>
-            <div className="flex justify-center gap-3">
-              {AVATAR_PRESETS.map((url, i) => (
-                <img key={i} src={url} alt="" onClick={() => setSelectedAvatar(url)} className="w-12 h-12 rounded-full object-cover cursor-pointer transition-all hover:scale-125 shadow-md" style={{ border: selectedAvatar === url ? '3px solid var(--accent)' : '2px solid transparent' }} />
-              ))}
+          <div className="relative z-10 space-y-6">
+            <span className="px-4 py-1.5 rounded-full text-xs font-bold bg-red-500/20 text-red-400 border border-red-500/40 inline-flex items-center gap-2">
+              <Radio size={14} className="animate-pulse" /> Live Mesh Network Ready
+            </span>
+            <h1 className="text-4xl xl:text-5xl font-black tracking-tight leading-tight text-white">
+              Next-Gen Neumorphic <br />
+              <span className="text-transparent bg-clip-text bg-gradient-to-r from-red-400 to-rose-500">WebRTC & AI</span> Workspace
+            </h1>
+            <p className="text-sm text-slate-400 max-w-md leading-relaxed font-medium">
+              Ultra low-latency P2P video calls, real-time messaging, multi-user audio studio, and AI-powered chat assistants built on Neumorphic Soft UI architecture.
+            </p>
+
+            <div className="grid grid-cols-2 gap-4 max-w-md pt-4">
+              <div className="neu-card p-4 flex items-center gap-3">
+                <ShieldCheck size={22} className="text-red-400 shrink-0" />
+                <div>
+                  <h4 className="text-xs font-bold text-white">E2E Encrypted</h4>
+                  <p className="text-[10px] text-slate-400">Zero-knowledge P2P</p>
+                </div>
+              </div>
+              <div className="neu-card p-4 flex items-center gap-3">
+                <Bot size={22} className="text-red-400 shrink-0" />
+                <div>
+                  <h4 className="text-xs font-bold text-white">PulseAI Integrated</h4>
+                  <p className="text-[10px] text-slate-400">Gemini 1.5 Assistant</p>
+                </div>
+              </div>
             </div>
           </div>
 
-          <label className="block text-[11px] font-bold uppercase tracking-wider mb-2" style={{ color: 'var(--text-muted)' }}>Your Display Name</label>
-          <input type="text" value={userName} onChange={(e) => setUserName(e.target.value)} placeholder="e.g. Sara Sanders" className="neu-input mb-6 !w-full" required autoFocus />
-          <button type="submit" className="app-btn app-btn-primary w-full py-4 text-xs font-bold shadow-xl !rounded-2xl flex items-center justify-center gap-2">
-            <Sparkles size={16} /> Enter Workspace
-          </button>
-        </form>
+          <div className="relative z-10 text-xs text-slate-500 font-medium">
+            © 2026 SyncPulse Pro Network · Neumorphic Architecture v7.0
+          </div>
+        </div>
+
+        {/* Right Full-Screen Onboarding Panel */}
+        <div className="flex-1 h-full flex flex-col items-center justify-center p-6 md:p-12 relative overflow-y-auto">
+          <form onSubmit={handleRegister} className="w-full max-w-md anim-scale space-y-6">
+            <div className="lg:hidden flex flex-col items-center mb-4 text-center">
+              <div className="neu-btn-circle !w-16 !h-16 mb-3 text-white" style={{ background: 'var(--accent)' }}>
+                <Zap size={30} />
+              </div>
+              <h1 className="text-2xl font-black text-white">SyncPulse Pro</h1>
+              <p className="text-xs text-slate-400 font-semibold mt-1">Neumorphic Communication Network</p>
+            </div>
+
+            <div className="text-left mb-2 hidden lg:block">
+              <h2 className="text-2xl font-extrabold text-white">Join Workspace</h2>
+              <p className="text-xs text-slate-400 font-medium mt-1">Enter your display name to start calling and messaging</p>
+            </div>
+
+            <div className="neu-card p-6 md:p-8 space-y-6">
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider mb-3 text-slate-400">Choose Profile Avatar</label>
+                <div className="flex justify-center gap-3">
+                  {AVATAR_PRESETS.map((url, i) => (
+                    <img key={i} src={url} alt="" onClick={() => setSelectedAvatar(url)} className="w-13 h-13 rounded-full object-cover cursor-pointer transition-all hover:scale-115 shadow-md" style={{ border: selectedAvatar === url ? '3px solid var(--accent)' : '2px solid transparent' }} />
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold uppercase tracking-wider mb-2 text-slate-400">Your Display Name</label>
+                <input type="text" value={userName} onChange={(e) => setUserName(e.target.value)} placeholder="e.g. Sara Sanders" className="neu-input w-full !py-3.5 text-sm" required autoFocus />
+              </div>
+
+              <button type="submit" className="app-btn app-btn-primary w-full py-4 text-xs font-extrabold shadow-xl !rounded-2xl flex items-center justify-center gap-2">
+                <Sparkles size={18} /> Launch Workspace
+              </button>
+            </div>
+          </form>
+        </div>
       </div>
     );
   }
 
   /* ════════════════════════════════════════════════════════════════════════
-     3. MAIN NEUMORPHIC APPLICATION (Matching Image 1 Exact Layout)
+     3. MAIN NEUMORPHIC APPLICATION (100% RESPONSIVE)
      ════════════════════════════════════════════════════════════════════════ */
   return (
-    <div className="h-full w-full flex flex-col md:flex-row relative overflow-hidden" style={{ background: 'var(--bg-app)' }}>
+    <div className="fixed inset-0 w-screen h-screen flex flex-col md:flex-row overflow-hidden" style={{ background: 'var(--bg-app)' }}>
       <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" />
 
       {/* 🔔 INCOMING CALL MODAL */}
@@ -1160,7 +1204,7 @@ export default function Home() {
             </div>
           )}
 
-          {/* ─── SUB-PAGE 3: FRIENDS SYSTEM ─────────────────────────────────── */}
+          {/* ─── SUB-PAGE 3: FRIENDS SYSTEM (Fixed Presence Discovery) ─────── */}
           {screen === 'friends' && (
             <div className="flex-1 flex flex-col h-full overflow-hidden" style={{ background: 'var(--bg-main)' }}>
               <div className="px-6 h-20 flex items-center justify-between shrink-0" style={{ borderBottom: '1px solid var(--border)', background: 'var(--bg-sidebar)' }}>
@@ -1168,92 +1212,27 @@ export default function Home() {
                   <Users size={22} style={{ color: 'var(--accent)' }} /> Friends & Network
                 </h2>
                 <div className="flex gap-2">
+                  <button onClick={() => setFriendsTab('find')} className={`px-4 py-2 rounded-full text-xs font-bold transition-all ${friendsTab === 'find' ? 'bg-red-500 text-white shadow-md' : 'text-slate-400 hover:text-white'}`}>
+                    Online Users ({others.length})
+                  </button>
                   <button onClick={() => setFriendsTab('friends')} className={`px-4 py-2 rounded-full text-xs font-bold transition-all ${friendsTab === 'friends' ? 'bg-red-500 text-white shadow-md' : 'text-slate-400 hover:text-white'}`}>
                     Friends ({friends.length})
                   </button>
                   <button onClick={() => setFriendsTab('requests')} className={`relative px-4 py-2 rounded-full text-xs font-bold transition-all ${friendsTab === 'requests' ? 'bg-red-500 text-white shadow-md' : 'text-slate-400 hover:text-white'}`}>
                     Requests {friendRequests.length > 0 && <span className="ml-1 px-1.5 py-0.5 rounded-full text-[10px] bg-red-500 text-white">{friendRequests.length}</span>}
                   </button>
-                  <button onClick={() => setFriendsTab('find')} className={`px-4 py-2 rounded-full text-xs font-bold transition-all ${friendsTab === 'find' ? 'bg-red-500 text-white shadow-md' : 'text-slate-400 hover:text-white'}`}>
-                    Online Users ({others.length})
-                  </button>
                 </div>
               </div>
 
               <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-4">
-                {/* SUB-TAB 1: CONFIRMED FRIENDS */}
-                {friendsTab === 'friends' && (
-                  <div>
-                    {friendObjects.length === 0 ? (
-                      <div className="neu-card p-10 text-center">
-                        <UserCheck size={40} className="mx-auto mb-3 opacity-30 text-slate-500" />
-                        <p className="text-sm font-bold text-white">No friends added yet</p>
-                        <p className="text-xs mt-1 text-slate-400">Click "Online Users" tab to send friend requests!</p>
-                      </div>
-                    ) : (
-                      friendObjects.map((u) => (
-                        <div key={u.id} className="flex items-center justify-between p-4 rounded-2xl mb-3 neu-card">
-                          <div className="flex items-center gap-3.5">
-                            <img src={u.avatar} alt="" className="w-12 h-12 rounded-full object-cover" style={{ border: '2px solid var(--accent)' }} />
-                            <div>
-                              <h4 className="text-sm font-bold text-white">{u.name}</h4>
-                              <span className="text-[11px] font-semibold text-emerald-400">● Active Online</span>
-                            </div>
-                          </div>
-                          <div className="flex gap-2">
-                            <button onClick={() => { setSelectedContact(u); setScreen('chats'); }} className="neu-btn-circle !w-11 !h-11 text-slate-300">
-                              <MessageSquare size={17} />
-                            </button>
-                            <button onClick={() => startCall(u, true)} className="neu-btn-circle !w-11 !h-11 text-white" style={{ background: 'var(--accent)' }}>
-                              <Video size={17} />
-                            </button>
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                )}
-
-                {/* SUB-TAB 2: PENDING FRIEND REQUESTS */}
-                {friendsTab === 'requests' && (
-                  <div>
-                    {friendRequests.length === 0 ? (
-                      <div className="neu-card p-10 text-center">
-                        <UserPlus size={40} className="mx-auto mb-3 opacity-30 text-slate-500" />
-                        <p className="text-sm font-bold text-white">No pending friend requests</p>
-                      </div>
-                    ) : (
-                      friendRequests.map((u) => (
-                        <div key={u.id} className="flex items-center justify-between p-4 rounded-2xl mb-3 neu-card">
-                          <div className="flex items-center gap-3.5">
-                            <img src={u.avatar} alt="" className="w-12 h-12 rounded-full object-cover" style={{ border: '2px solid var(--accent)' }} />
-                            <div>
-                              <h4 className="text-sm font-bold text-white">{u.name}</h4>
-                              <span className="text-[11px] font-semibold text-red-400">Sent you a friend request</span>
-                            </div>
-                          </div>
-                          <div className="flex gap-2">
-                            <button onClick={() => rejectFriendRequest(u)} className="app-btn px-4 py-2 text-xs font-bold bg-red-600/20 text-red-400 border border-red-500/40 hover:bg-red-600 hover:text-white">
-                              Decline
-                            </button>
-                            <button onClick={() => acceptFriendRequest(u)} className="app-btn app-btn-primary px-4 py-2 text-xs font-bold shadow-md">
-                              Accept
-                            </button>
-                          </div>
-                        </div>
-                      ))
-                    )}
-                  </div>
-                )}
-
-                {/* SUB-TAB 3: FIND ONLINE USERS */}
+                {/* SUB-TAB 1: FIND ONLINE USERS */}
                 {friendsTab === 'find' && (
                   <div>
                     {others.length === 0 ? (
                       <div className="neu-card p-10 text-center">
                         <UserSearch size={40} className="mx-auto mb-3 opacity-30 text-slate-500" />
                         <p className="text-sm font-bold text-white">No other users online right now</p>
-                        <p className="text-xs mt-1 text-slate-400">Open another browser tab or share your link!</p>
+                        <p className="text-xs mt-1 text-slate-400">Open another browser window or share your deployment link to connect!</p>
                       </div>
                     ) : (
                       others.map((u) => {
@@ -1286,6 +1265,71 @@ export default function Home() {
                           </div>
                         );
                       })
+                    )}
+                  </div>
+                )}
+
+                {/* SUB-TAB 2: CONFIRMED FRIENDS */}
+                {friendsTab === 'friends' && (
+                  <div>
+                    {friendObjects.length === 0 ? (
+                      <div className="neu-card p-10 text-center">
+                        <UserCheck size={40} className="mx-auto mb-3 opacity-30 text-slate-500" />
+                        <p className="text-sm font-bold text-white">No friends added yet</p>
+                        <p className="text-xs mt-1 text-slate-400">Click "Online Users" tab to send friend requests!</p>
+                      </div>
+                    ) : (
+                      friendObjects.map((u) => (
+                        <div key={u.id} className="flex items-center justify-between p-4 rounded-2xl mb-3 neu-card">
+                          <div className="flex items-center gap-3.5">
+                            <img src={u.avatar} alt="" className="w-12 h-12 rounded-full object-cover" style={{ border: '2px solid var(--accent)' }} />
+                            <div>
+                              <h4 className="text-sm font-bold text-white">{u.name}</h4>
+                              <span className="text-[11px] font-semibold text-emerald-400">● Active Online</span>
+                            </div>
+                          </div>
+                          <div className="flex gap-2">
+                            <button onClick={() => { setSelectedContact(u); setScreen('chats'); }} className="neu-btn-circle !w-11 !h-11 text-slate-300">
+                              <MessageSquare size={17} />
+                            </button>
+                            <button onClick={() => startCall(u, true)} className="neu-btn-circle !w-11 !h-11 text-white" style={{ background: 'var(--accent)' }}>
+                              <Video size={17} />
+                            </button>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                )}
+
+                {/* SUB-TAB 3: PENDING FRIEND REQUESTS */}
+                {friendsTab === 'requests' && (
+                  <div>
+                    {friendRequests.length === 0 ? (
+                      <div className="neu-card p-10 text-center">
+                        <UserPlus size={40} className="mx-auto mb-3 opacity-30 text-slate-500" />
+                        <p className="text-sm font-bold text-white">No pending friend requests</p>
+                      </div>
+                    ) : (
+                      friendRequests.map((u) => (
+                        <div key={u.id} className="flex items-center justify-between p-4 rounded-2xl mb-3 neu-card">
+                          <div className="flex items-center gap-3.5">
+                            <img src={u.avatar} alt="" className="w-12 h-12 rounded-full object-cover" style={{ border: '2px solid var(--accent)' }} />
+                            <div>
+                              <h4 className="text-sm font-bold text-white">{u.name}</h4>
+                              <span className="text-[11px] font-semibold text-red-400">Sent you a friend request</span>
+                            </div>
+                          </div>
+                          <div className="flex gap-2">
+                            <button onClick={() => rejectFriendRequest(u)} className="app-btn px-4 py-2 text-xs font-bold bg-red-600/20 text-red-400 border border-red-500/40 hover:bg-red-600 hover:text-white">
+                              Decline
+                            </button>
+                            <button onClick={() => acceptFriendRequest(u)} className="app-btn app-btn-primary px-4 py-2 text-xs font-bold shadow-md">
+                              Accept
+                            </button>
+                          </div>
+                        </div>
+                      ))
                     )}
                   </div>
                 )}
@@ -1359,7 +1403,7 @@ export default function Home() {
             </div>
           )}
 
-          {/* ─── SUB-PAGE 6: SETTINGS (Includes 8 Image 2 Themes) ──────────── */}
+          {/* ─── SUB-PAGE 6: SETTINGS ────────────────────────────────────── */}
           {screen === 'settings' && (
             <div className="flex-1 flex flex-col h-full overflow-y-auto" style={{ background: 'var(--bg-main)' }}>
               <div className="px-6 h-20 flex items-center justify-between shrink-0" style={{ borderBottom: '1px solid var(--border)', background: 'var(--bg-sidebar)' }}>

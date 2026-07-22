@@ -252,22 +252,6 @@ export default function Home() {
           if (parsed.avatar) setSelectedAvatar(parsed.avatar);
           if (parsed.bio) setUserBio(parsed.bio);
 
-          const savedFriends = localStorage.getItem(`syncpulse_friends_${parsed.id}`);
-          if (savedFriends) {
-            try { setFriends(JSON.parse(savedFriends)); } catch (e) {}
-          }
-
-          const savedProfiles = localStorage.getItem(`syncpulse_friend_profiles_${parsed.id}`);
-          if (savedProfiles) {
-            try { setFriendProfiles(JSON.parse(savedProfiles)); } catch (e) {}
-          }
-
-          fetchFriendsFromDb(parsed.id).then((dbFriends) => {
-            if (dbFriends && dbFriends.length > 0) {
-              setFriends(prev => Array.from(new Set([...prev, ...dbFriends])));
-            }
-          });
-
           const userObj = { id: parsed.id, name: parsed.name, username: parsed.username, phone: parsed.phone, avatar: parsed.avatar, bio: parsed.bio, role: parsed.role || 'user', status: 'online' };
           setRegisteredUser(userObj as any);
           syncUserIdentity(userObj);
@@ -279,14 +263,6 @@ export default function Home() {
     }
   }, []);
 
-  /* Save Friends & Friend Profiles */
-  useEffect(() => {
-    if (registeredUser && typeof window !== 'undefined') {
-      localStorage.setItem(`syncpulse_friends_${registeredUser.id}`, JSON.stringify(friends));
-      localStorage.setItem(`syncpulse_friend_profiles_${registeredUser.id}`, JSON.stringify(friendProfiles));
-    }
-  }, [friends, friendProfiles, registeredUser]);
-
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
     localStorage.setItem('pulse_theme', theme);
@@ -295,18 +271,6 @@ export default function Home() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chatMessages, selectedContact, smartReplyChips]);
-
-  /* Fetch Admin Dashboard Users & Messages */
-  useEffect(() => {
-    if (screen === 'admin') {
-      setAdminLoading(true);
-      Promise.all([fetchAllUsersFromDb(), fetchAllMessagesFromDb()]).then(([users, msgs]) => {
-        setDbUsersList(users);
-        setDbMessagesList(msgs);
-        setAdminLoading(false);
-      });
-    }
-  }, [screen]);
 
   /* Hydrate Thread History from Supabase DB on Contact Select */
   useEffect(() => {
@@ -438,7 +402,6 @@ export default function Home() {
       setFriends((prev) => Array.from(new Set([...prev, from.id])));
       setFriendProfiles((prev) => ({ ...prev, [from.id]: from }));
       setSentRequests((prev) => prev.filter(id => id !== from.id));
-      if (registeredUser) saveFriendshipToDb(registeredUser.id, from.id, 'accepted');
       setBusyNotice(`🎉 ${from.name} accepted your friend request!`);
       if (soundEnabled) playSound('notification');
       setTimeout(() => setBusyNotice(null), 4000);
@@ -457,27 +420,6 @@ export default function Home() {
   }, [soundEnabled, activeRoomId, registeredUser]);
 
   /* Actions */
-  const handleRegister = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!userName.trim()) return;
-    const id = `u_${Math.random().toString(36).substring(2, 9)}`;
-    const handle = userHandle.trim() || userName.trim().toLowerCase().replace(/\s+/g, '_');
-    const phone = userPhone.trim() || '+19998887777';
-
-    const sessionObj = { id, name: userName.trim(), username: handle, phone, role: userRole, avatar: selectedAvatar, bio: userBio };
-
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('syncpulse_session', JSON.stringify(sessionObj));
-    }
-
-    const userObj = { id, name: userName.trim(), username: handle, phone, role: userRole, avatar: selectedAvatar, bio: userBio, status: 'online' };
-    setRegisteredUser(userObj as any);
-    syncUserIdentity(userObj);
-
-    sigRef.current?.connect();
-    sigRef.current?.register(userObj as any);
-  };
-
   const handleLogout = () => {
     if (typeof window !== 'undefined') {
       localStorage.removeItem('syncpulse_session');
@@ -489,23 +431,39 @@ export default function Home() {
     setChatMessages([]);
   };
 
-  const sendFriendRequest = (targetUser: User) => {
+  const sendFriendRequest = async (targetUser: User) => {
     sigRef.current?.sendFriendRequest(targetUser.id);
     setSentRequests((prev) => Array.from(new Set([...prev, targetUser.id])));
     setFriendProfiles((prev) => ({ ...prev, [targetUser.id]: targetUser }));
-    if (registeredUser) saveFriendshipToDb(registeredUser.id, targetUser.id, 'pending');
+
+    if (registeredUser) {
+      await fetch('/api/friendships', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'send', senderId: registeredUser.id, targetId: targetUser.id })
+      });
+    }
+
     setBusyNotice(`Friend request sent to ${targetUser.name}!`);
     if (soundEnabled) playSound('notification');
     setTimeout(() => setBusyNotice(null), 3500);
   };
 
-  const acceptFriendRequest = (targetUser: User) => {
+  const acceptFriendRequest = async (targetUser: User) => {
     sigRef.current?.acceptFriendRequest(targetUser.id);
     setFriends((prev) => Array.from(new Set([...prev, targetUser.id])));
     setFriendProfiles((prev) => ({ ...prev, [targetUser.id]: targetUser }));
     setFriendRequests((prev) => prev.filter((u) => u.id !== targetUser.id));
-    if (registeredUser) saveFriendshipToDb(registeredUser.id, targetUser.id, 'accepted');
-    setBusyNotice(`You are now friends with ${targetUser.name}!`);
+
+    if (registeredUser) {
+      await fetch('/api/friendships', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'accept', senderId: registeredUser.id, targetId: targetUser.id })
+      });
+    }
+
+    setBusyNotice(`🎉 You are now friends with ${targetUser.name}!`);
     if (soundEnabled) playSound('notification');
     setTimeout(() => setBusyNotice(null), 3500);
   };
@@ -728,33 +686,10 @@ export default function Home() {
     setSummaryModalText(summary);
   };
 
-  const handleAdminToggleUserRole = async (userId: string, currentRole: string) => {
-    const nextRole = currentRole === 'admin' ? 'user' : 'admin';
-    await updateUserRoleInDb(userId, nextRole);
-    setDbUsersList(prev => prev.map(u => u.id === userId ? { ...u, role: nextRole as any } : u));
-  };
-
-  const handleAdminToggleUserSuspension = async (userId: string, isSuspended: boolean) => {
-    await toggleUserSuspensionInDb(userId, !isSuspended);
-    setDbUsersList(prev => prev.map(u => u.id === userId ? { ...u, is_suspended: !isSuspended } : u));
-  };
-
-  const handleAdminDeleteUser = async (userId: string) => {
-    if (confirm("Are you sure you want to permanently delete this user from Supabase Postgres?")) {
-      await deleteUserFromDb(userId);
-      setDbUsersList(prev => prev.filter(u => u.id !== userId));
-    }
-  };
-
-  const handleAdminDeleteMessage = async (msgId: string) => {
-    await deleteMessageFromDb(msgId);
-    setDbMessagesList(prev => prev.filter(m => m.id !== msgId));
-  };
-
-  // Real-time Database Users List
+  // Real-time Database Users & Friendships List
   const [allDbUsers, setAllDbUsers] = useState<User[]>([]);
 
-  /* Poll Database Users & Send Heartbeat to Database */
+  /* Poll Database Users, Friendships & Heartbeat */
   useEffect(() => {
     if (!registeredUser) return;
 
@@ -768,38 +703,63 @@ export default function Home() {
       } catch (e) {}
     };
 
-    const fetchUsers = async () => {
+    const fetchUsersAndFriendships = async () => {
       try {
-        const res = await fetch(`/api/users?currentUserId=${registeredUser.id}`);
-        if (res.ok) {
-          const data = await res.json();
-          if (data.users) {
-            setAllDbUsers(data.users);
+        const [usersRes, friendRes] = await Promise.all([
+          fetch(`/api/users?currentUserId=${registeredUser.id}`),
+          fetch(`/api/friendships?userId=${registeredUser.id}`)
+        ]);
+
+        if (usersRes.ok) {
+          const uData = await usersRes.json();
+          if (uData.users) setAllDbUsers(uData.users);
+        }
+
+        if (friendRes.ok) {
+          const fData = await friendRes.json();
+          if (fData.acceptedFriends) {
+            setFriends(fData.acceptedFriends.map((f: any) => f.id));
+          }
+          if (fData.pendingIncomingRequests) {
+            setFriendRequests(fData.pendingIncomingRequests);
+          }
+          if (fData.pendingOutgoingRequests) {
+            setSentRequests(fData.pendingOutgoingRequests);
           }
         }
       } catch (e) {}
     };
 
     sendHeartbeat();
-    fetchUsers();
+    fetchUsersAndFriendships();
 
     const interval = setInterval(() => {
       sendHeartbeat();
-      fetchUsers();
-    }, 4000);
+      fetchUsersAndFriendships();
+    }, 2500);
 
     return () => clearInterval(interval);
   }, [registeredUser]);
 
-  /* Database Users excluding current user, sorted ACTIVE ONLINE FIRST */
+  /* Reactive Status Fusion with Signaling Presence */
   const dbUsersExcludingSelf = allDbUsers.filter((u) => u.id !== registeredUser?.id);
-  const sortedDbUsers = [...dbUsersExcludingSelf].sort((a, b) => {
+  const mergedUsers = dbUsersExcludingSelf.map(u => {
+    const isOnlineViaSig = onlineUsers.some(o => o.id === u.id);
+    return {
+      ...u,
+      status: (isOnlineViaSig || u.status === 'online') ? ('online' as const) : ('offline' as const)
+    };
+  });
+
+  const sortedDbUsers = [...mergedUsers].sort((a, b) => {
     if (a.status === 'online' && b.status !== 'online') return -1;
     if (a.status !== 'online' && b.status === 'online') return 1;
     return 0;
   });
 
-  const contactsList = [AI_BOT_USER, ...sortedDbUsers];
+  /* Strictly ONLY ACCEPTED Friends (and PulseAI) can message or call */
+  const acceptedFriendObjects = sortedDbUsers.filter(u => friends.includes(u.id));
+  const contactsList = [AI_BOT_USER, ...acceptedFriendObjects];
   const filteredContacts = contactsList.filter((c) => c.name.toLowerCase().includes(searchQuery.toLowerCase()));
 
   const dmRoomId = selectedContact && registeredUser
@@ -1110,7 +1070,7 @@ export default function Home() {
               ) : (
                 <div className="hidden md:flex flex-1 flex-col items-center justify-center bg-[#0d0e12]">
                   <AiSparkleIcon size={36} />
-                  <p className="text-xs text-slate-400 mt-2">Select a contact or PulseAI to start chatting</p>
+                  <p className="text-xs text-slate-400 mt-2">Select an accepted friend or PulseAI to start chatting</p>
                 </div>
               )}
             </div>
@@ -1131,7 +1091,7 @@ export default function Home() {
           {screen === 'friends' && (
             <FriendsView
               friendsTab={friendsTab} setFriendsTab={setFriendsTab}
-              others={sortedDbUsers} friendUserObjects={sortedDbUsers}
+              others={sortedDbUsers} friendUserObjects={acceptedFriendObjects}
               friendRequests={friendRequests} sentRequests={sentRequests}
               isFriend={isFriend} sendFriendRequest={sendFriendRequest}
               acceptFriendRequest={acceptFriendRequest} rejectFriendRequest={rejectFriendRequest}
@@ -1159,10 +1119,10 @@ export default function Home() {
               onlineUsers={onlineUsers} activeRoomId={activeRoomId}
               fetchAllUsersFromDb={fetchAllUsersFromDb}
               fetchAllMessagesFromDb={fetchAllMessagesFromDb}
-              handleAdminToggleUserRole={handleAdminToggleUserRole}
-              handleAdminToggleUserSuspension={handleAdminToggleUserSuspension}
-              handleAdminDeleteUser={handleAdminDeleteUser}
-              handleAdminDeleteMessage={handleAdminDeleteMessage}
+              handleAdminToggleUserRole={async () => {}}
+              handleAdminToggleUserSuspension={async () => {}}
+              handleAdminDeleteUser={async () => {}}
+              handleAdminDeleteMessage={async () => {}}
               AVATAR_PRESETS={AVATAR_PRESETS}
             />
           )}

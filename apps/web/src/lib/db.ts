@@ -1,6 +1,6 @@
 import { Pool } from 'pg';
 
-const connectionString = process.env.DATABASE_URL || 'postgresql://postgres.fbgwhkgvrfutahjjuwct:Chandan%409777767188@aws-0-ap-southeast-2.pooler.supabase.com:6543/postgres';
+const connectionString = 'postgresql://postgres.fbgwhkgvrfutahjjuwct:Chandan%409777767188@aws-0-ap-southeast-2.pooler.supabase.com:6543/postgres';
 
 let pool: Pool | null = null;
 
@@ -11,7 +11,7 @@ export function getDbPool() {
       ssl: { rejectUnauthorized: false },
       max: 1,
       idleTimeoutMillis: 1000,
-      connectionTimeoutMillis: 2000,
+      connectionTimeoutMillis: 5000,
     });
   }
   return pool;

@@ -47,6 +47,7 @@ export interface ChatMessage {
   status?: 'sent' | 'delivered' | 'read';
   reactions?: MessageReaction[];
   isEdited?: boolean;
+  isDeleted?: boolean;
   editedAt?: number;
 }
 

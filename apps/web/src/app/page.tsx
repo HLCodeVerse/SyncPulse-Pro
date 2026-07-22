@@ -22,7 +22,7 @@ import {
   Search, Send, CheckCheck, Check, ArrowLeft, Settings, LogOut, Users, Zap,
   X, Sparkles, Hash, Edit2, Bot, Wand2, Globe2, ShieldCheck,
   Pin, File, PhoneCall, User as UserIcon, UserPlus, UserCheck, UserSearch,
-  Activity, Plus, Camera, Smile, Paperclip, Lock, Radio
+  Activity, Plus, Camera, Smile, Paperclip, Lock, Radio, Trash2, Reply, Bell
 } from 'lucide-react';
 import { askGemini, generateSmartReplies, summarizeChatHistory, rephraseText, translateText } from '../lib/aiService';
 
@@ -56,7 +56,25 @@ const THEMES: { key: string; label: string; dot: string; grad: string }[] = [
   { key: 'peach-pink', label: 'Peach Pink', dot: '#ec368d', grad: 'linear-gradient(135deg, #ffc145, #ec368d)' },
 ];
 
-const EMOJI_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏', '🚀', '🔥'];
+const EMOJI_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🔥'];
+
+/* ✨ Custom Vector Animated SVG AI Icon */
+function AiSparkleIcon({ size = 20, className = '' }: { size?: number; className?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className={`shrink-0 ${className}`}>
+      <circle cx="12" cy="12" r="9" stroke="url(#aiGrad)" strokeWidth="1.5" strokeDasharray="3 3" className="animate-spin" style={{ animationDuration: '6s' }} />
+      <path d="M12 3V6M12 18V21M3 12H6M18 12H21M6.343 6.343L8.464 8.464M15.536 15.536L17.657 17.657M6.343 17.657L8.464 15.536M15.536 8.464L17.657 6.343" stroke="url(#aiGrad)" strokeWidth="1.2" strokeLinecap="round" />
+      <path d="M12 8L13.2 10.8L16 12L13.2 13.2L12 16L10.8 13.2L8 12L10.8 10.8L12 8Z" fill="url(#aiGrad)" className="animate-pulse" />
+      <defs>
+        <linearGradient id="aiGrad" x1="0" y1="0" x2="24" y2="24" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#ff453a" />
+          <stop offset="0.5" stopColor="#bf5af2" />
+          <stop offset="1" stopColor="#30d158" />
+        </linearGradient>
+      </defs>
+    </svg>
+  );
+}
 
 function isOnlyEmoji(text: string): boolean {
   const clean = text.trim();
@@ -65,7 +83,8 @@ function isOnlyEmoji(text: string): boolean {
   return emojiRegex.test(clean);
 }
 
-function playSound(type: 'message' | 'ring' | 'dial') {
+/* Synthetic Audio Notifications */
+function playSound(type: 'message' | 'notification' | 'ring' | 'dial') {
   try {
     const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
     const osc = ctx.createOscillator();
@@ -73,17 +92,24 @@ function playSound(type: 'message' | 'ring' | 'dial') {
     osc.connect(gain);
     gain.connect(ctx.destination);
 
-    if (type === 'message') {
-      osc.frequency.setValueAtTime(587.33, ctx.currentTime);
-      osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.12);
-      gain.gain.setValueAtTime(0.15, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.25);
+    if (type === 'notification') {
+      osc.frequency.setValueAtTime(880, ctx.currentTime);
+      osc.frequency.setValueAtTime(1174.66, ctx.currentTime + 0.08);
+      gain.gain.setValueAtTime(0.2, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
       osc.start();
-      osc.stop(ctx.currentTime + 0.25);
+      osc.stop(ctx.currentTime + 0.3);
+    } else if (type === 'message') {
+      osc.frequency.setValueAtTime(587.33, ctx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(880, ctx.currentTime + 0.1);
+      gain.gain.setValueAtTime(0.15, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.2);
     } else if (type === 'ring') {
       osc.frequency.setValueAtTime(440, ctx.currentTime);
-      osc.frequency.setValueAtTime(480, ctx.currentTime + 0.1);
-      gain.gain.setValueAtTime(0.2, ctx.currentTime);
+      osc.frequency.setValueAtTime(523.25, ctx.currentTime + 0.15);
+      gain.gain.setValueAtTime(0.25, ctx.currentTime);
       gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
       osc.start();
       osc.stop(ctx.currentTime + 0.4);
@@ -99,7 +125,7 @@ function playSound(type: 'message' | 'ring' | 'dial') {
 
 export default function Home() {
   const [showSplash, setShowSplash] = useState(true);
-  const [splashProgress, setSplashProgress] = useState(30);
+  const [splashProgress, setSplashProgress] = useState(35);
   const [userName, setUserName] = useState('');
   const [selectedAvatar, setSelectedAvatar] = useState(AVATAR_PRESETS[0]);
   const [userBio, setUserBio] = useState('Senior Full-Stack & WebRTC Engineer.');
@@ -111,7 +137,9 @@ export default function Home() {
   const [selectedContact, setSelectedContact] = useState<User | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
 
+  // Friends & Profile Cache
   const [friends, setFriends] = useState<string[]>([]);
+  const [friendProfiles, setFriendProfiles] = useState<Record<string, User>>({});
   const [friendRequests, setFriendRequests] = useState<User[]>([]);
   const [sentRequests, setSentRequests] = useState<string[]>([]);
   const [friendsTab, setFriendsTab] = useState<'find' | 'friends' | 'requests'>('find');
@@ -122,7 +150,7 @@ export default function Home() {
   });
   const [soundEnabled, setSoundEnabled] = useState(true);
 
-  // Call state
+  // Calls
   const [activeRoomId, setActiveRoomId] = useState<string | null>(null);
   const [groupRoomInput, setGroupRoomInput] = useState('');
   const [participants, setParticipants] = useState<Participant[]>([]);
@@ -135,20 +163,22 @@ export default function Home() {
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [showInviteModal, setShowInviteModal] = useState(false);
+  const [inCallChatToast, setInCallChatToast] = useState<{ senderName: string; text: string } | null>(null);
 
   // Calling & Dialing States
   const [incomingCall, setIncomingCall] = useState<{ roomId: string; caller: User; isVideo: boolean; callType: CallType } | null>(null);
   const [outgoingCall, setOutgoingCall] = useState<{ target: User; isVideo: boolean; roomId: string } | null>(null);
   const [busyNotice, setBusyNotice] = useState<string | null>(null);
 
-  // Chat State
+  // Chat & Reply State
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState('');
+  const [replyingTo, setReplyingTo] = useState<ChatMessage | null>(null);
   const [editingMessage, setEditingMessage] = useState<ChatMessage | null>(null);
   const [pinnedMessage, setPinnedMessage] = useState<ChatMessage | null>(null);
   const [smartReplies, setSmartReplies] = useState<string[]>([]);
   const [isAiThinking, setIsAiThinking] = useState(false);
-  const [showAiEnhancerMenu, setShowAiEnhancerMenu] = useState(false);
+  const [showAiMenu, setShowAiMenu] = useState(false);
 
   const [selectedFile, setSelectedFile] = useState<{ name: string; size: string } | null>(null);
   const [isVoiceRecording, setIsVoiceRecording] = useState(false);
@@ -160,20 +190,19 @@ export default function Home() {
 
   const [aiPolishInput, setAiPolishInput] = useState('');
   const [aiPolishOutput, setAiPolishOutput] = useState('');
-  const [aiPolishStyle, setAiPolishStyle] = useState<'professional' | 'casual' | 'fluent' | 'concise'>('professional');
 
   const sigRef = useRef<SignalingClient | null>(null);
   const pmRef = useRef<PeerConnectionManager | null>(null);
 
-  /* Splash Loader */
+  /* Splash Screen */
   useEffect(() => {
-    const t1 = setTimeout(() => setSplashProgress(80), 200);
-    const t2 = setTimeout(() => setSplashProgress(100), 500);
-    const t3 = setTimeout(() => setShowSplash(false), 800);
+    const t1 = setTimeout(() => setSplashProgress(85), 180);
+    const t2 = setTimeout(() => setSplashProgress(100), 450);
+    const t3 = setTimeout(() => setShowSplash(false), 700);
     return () => { clearTimeout(t1); clearTimeout(t2); clearTimeout(t3); };
   }, []);
 
-  /* Restore Session */
+  /* Restore Session & Friend Profiles Cache */
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const saved = localStorage.getItem('syncpulse_session');
@@ -190,6 +219,11 @@ export default function Home() {
             try { setFriends(JSON.parse(savedFriends)); } catch (e) {}
           }
 
+          const savedProfiles = localStorage.getItem(`syncpulse_friend_profiles_${parsed.id}`);
+          if (savedProfiles) {
+            try { setFriendProfiles(JSON.parse(savedProfiles)); } catch (e) {}
+          }
+
           const userObj: User = { id: parsed.id, name: parsed.name, avatar: parsed.avatar, status: 'online' };
           setRegisteredUser(userObj);
           sigRef.current?.connect();
@@ -199,12 +233,13 @@ export default function Home() {
     }
   }, []);
 
-  /* Save Friends */
+  /* Save Friends & Friend Profiles */
   useEffect(() => {
     if (registeredUser && typeof window !== 'undefined') {
       localStorage.setItem(`syncpulse_friends_${registeredUser.id}`, JSON.stringify(friends));
+      localStorage.setItem(`syncpulse_friend_profiles_${registeredUser.id}`, JSON.stringify(friendProfiles));
     }
-  }, [friends, registeredUser]);
+  }, [friends, friendProfiles, registeredUser]);
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme);
@@ -225,7 +260,7 @@ export default function Home() {
     return () => clearInterval(interval);
   }, [isVoiceRecording]);
 
-  /* Signaling */
+  /* Signaling Listeners */
   useEffect(() => {
     const sig = new SignalingClient({ url: SIGNALING_URL, autoConnect: false });
     sigRef.current = sig;
@@ -254,6 +289,13 @@ export default function Home() {
         if (prev.some(m => m.id === msg.id)) return prev;
         return [...prev, { ...msg, status: 'delivered' }];
       });
+
+      // Show in-call message toast during video call
+      if (activeRoomId) {
+        setInCallChatToast({ senderName: msg.sender.name, text: msg.text });
+        setTimeout(() => setInCallChatToast(null), 4000);
+      }
+
       if (soundEnabled) playSound('message');
     });
 
@@ -265,8 +307,9 @@ export default function Home() {
             : m.reactions;
           return {
             ...m,
-            text: message.text || m.text,
+            text: message.text !== undefined ? message.text : m.text,
             isEdited: message.isEdited !== undefined ? message.isEdited : m.isEdited,
+            isDeleted: message.isDeleted !== undefined ? message.isDeleted : m.isDeleted,
             reactions: updatedReactions,
           };
         }
@@ -302,18 +345,21 @@ export default function Home() {
       setTimeout(() => setBusyNotice(null), 4000);
     });
 
+    // 🤝 FRIEND REQUEST NOTIFICATIONS & AUTOMATIC PROFILE CACHING
     sig.on('friend:request', ({ from }) => {
       setFriendRequests((prev) => {
         if (prev.some(u => u.id === from.id)) return prev;
         return [...prev, from];
       });
-      if (soundEnabled) playSound('message');
+      if (soundEnabled) playSound('notification');
     });
 
     sig.on('friend:accept', ({ from }) => {
       setFriends((prev) => Array.from(new Set([...prev, from.id])));
+      setFriendProfiles((prev) => ({ ...prev, [from.id]: from }));
       setSentRequests((prev) => prev.filter(id => id !== from.id));
-      setBusyNotice(`${from.name} accepted your friend request!`);
+      setBusyNotice(`🎉 ${from.name} accepted your friend request!`);
+      if (soundEnabled) playSound('notification');
       setTimeout(() => setBusyNotice(null), 4000);
     });
 
@@ -327,7 +373,7 @@ export default function Home() {
     });
 
     return () => { pm.closeAll(); sig.disconnect(); };
-  }, [soundEnabled]);
+  }, [soundEnabled, activeRoomId]);
 
   useEffect(() => {
     if (!selectedContact || !registeredUser) return;
@@ -383,15 +429,19 @@ export default function Home() {
   const sendFriendRequest = (targetUser: User) => {
     sigRef.current?.sendFriendRequest(targetUser.id);
     setSentRequests((prev) => Array.from(new Set([...prev, targetUser.id])));
+    setFriendProfiles((prev) => ({ ...prev, [targetUser.id]: targetUser }));
     setBusyNotice(`Friend request sent to ${targetUser.name}!`);
+    if (soundEnabled) playSound('notification');
     setTimeout(() => setBusyNotice(null), 3500);
   };
 
   const acceptFriendRequest = (targetUser: User) => {
     sigRef.current?.acceptFriendRequest(targetUser.id);
     setFriends((prev) => Array.from(new Set([...prev, targetUser.id])));
+    setFriendProfiles((prev) => ({ ...prev, [targetUser.id]: targetUser }));
     setFriendRequests((prev) => prev.filter((u) => u.id !== targetUser.id));
     setBusyNotice(`You are now friends with ${targetUser.name}!`);
+    if (soundEnabled) playSound('notification');
     setTimeout(() => setBusyNotice(null), 3500);
   };
 
@@ -501,6 +551,10 @@ export default function Home() {
   const handleSendMessage = async (textToSend?: string) => {
     const rawContent = textToSend || inputText;
     let content = rawContent.trim();
+    if (replyingTo) {
+      content = `💬 Replying to @${replyingTo.sender.name}: "${replyingTo.text.slice(0, 40)}"\n${content}`;
+      setReplyingTo(null);
+    }
     if (selectedFile) {
       content = `📎 File Attachment: ${selectedFile.name} (${selectedFile.size})\n${content}`;
       setSelectedFile(null);
@@ -561,6 +615,27 @@ export default function Home() {
     handleSendMessage(`🎵 Voice Note (${recordingSeconds}s)`);
   };
 
+  const handleDeleteMessage = (msgId: string) => {
+    if (!selectedContact) return;
+    setChatMessages(prev => prev.map(m => m.id === msgId ? { ...m, text: '🚫 This message was deleted', isDeleted: true } : m));
+    if (selectedContact.id !== AI_BOT_USER.id) {
+      sigRef.current?.deleteMessage(msgId, selectedContact.id);
+    }
+  };
+
+  const handleInlineAiEnhance = async (style: 'professional' | 'concise' | 'casual' | 'translate') => {
+    if (!inputText.trim()) return;
+    setShowAiMenu(false);
+    setIsAiThinking(true);
+    let enhanced = '';
+    if (style === 'professional') enhanced = await rephraseText(inputText.trim(), 'professional');
+    else if (style === 'concise') enhanced = await rephraseText(inputText.trim(), 'concise');
+    else if (style === 'casual') enhanced = await rephraseText(inputText.trim(), 'casual');
+    else if (style === 'translate') enhanced = await translateText(inputText.trim(), 'Spanish');
+    setIsAiThinking(false);
+    if (enhanced) setInputText(enhanced);
+  };
+
   const handleAddReaction = (messageId: string, emoji: string) => {
     if (!selectedContact || !registeredUser) return;
     setChatMessages(prev => prev.map(m => {
@@ -595,9 +670,10 @@ export default function Home() {
     }
   };
 
+  /* Online & Cached Friend Contacts */
   const others = onlineUsers.filter((u) => u.id !== registeredUser?.id);
-  const friendObjects = others.filter((u) => friends.includes(u.id));
-  const contactsList = [AI_BOT_USER, ...friendObjects];
+  const friendUserObjects = friends.map(id => friendProfiles[id] || others.find(u => u.id === id) || { id, name: `Friend ${id.slice(-4)}`, avatar: AVATAR_PRESETS[0], status: 'online' });
+  const contactsList = [AI_BOT_USER, ...friendUserObjects];
   const filteredContacts = contactsList.filter((c) => c.name.toLowerCase().includes(searchQuery.toLowerCase()));
 
   const dmRoomId = selectedContact && registeredUser
@@ -624,12 +700,12 @@ export default function Home() {
       <div className="fixed inset-0 w-screen h-screen flex flex-col items-center justify-center relative overflow-hidden anim-fade z-50 bg-black">
         <div className="relative z-10 flex flex-col items-center text-center p-6 max-w-sm w-full">
           <div className="w-16 h-16 rounded-2xl flex items-center justify-center bg-red-500 mb-4 shadow-lg">
-            <Zap size={36} className="text-white" />
+            <AiSparkleIcon size={36} />
           </div>
           <h1 className="text-2xl font-extrabold tracking-tight text-white mb-1">
             SyncPulse <span className="text-red-500">Pro</span>
           </h1>
-          <p className="text-[11px] text-slate-400 font-medium mb-6">AMOLED Matte Finish Network</p>
+          <p className="text-[11px] text-slate-400 font-medium mb-6">AMOLED AI & WebRTC Network</p>
           <div className="w-full bg-slate-900 h-1.5 rounded-full overflow-hidden border border-white/10 mb-2">
             <div className="h-full bg-red-500 rounded-full transition-all duration-500" style={{ width: `${splashProgress}%` }} />
           </div>
@@ -638,24 +714,24 @@ export default function Home() {
     );
   }
 
-  /* Full Screen Matte Login Screen */
+  /* Full Screen Login Screen */
   if (!registeredUser) {
     return (
       <div className="fixed inset-0 w-screen h-screen flex flex-col lg:flex-row overflow-hidden z-50 bg-black">
         <div className="hidden lg:flex w-1/2 h-full flex-col justify-between p-12 relative border-r border-white/10 bg-[#07080b]">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-red-500 flex items-center justify-center text-white font-bold">
-              <Zap size={20} />
+              <AiSparkleIcon size={22} />
             </div>
             <h2 className="text-xl font-black text-white tracking-tight">SyncPulse <span className="text-red-500">Pro</span></h2>
           </div>
 
           <div className="space-y-4 max-w-md">
             <span className="px-3 py-1 rounded-full text-[11px] font-semibold bg-red-500/10 text-red-400 border border-red-500/30 inline-flex items-center gap-1.5">
-              <Radio size={13} className="animate-pulse" /> AMOLED Matte WebRTC
+              <Radio size={13} className="animate-pulse" /> AMOLED AI & WebRTC Network
             </span>
             <h1 className="text-3xl xl:text-4xl font-extrabold tracking-tight text-white leading-tight">
-              Enterprise WebRTC Calling & AI Workspace
+              Enterprise WebRTC & AI Communication Hub
             </h1>
             <p className="text-xs text-slate-400 leading-relaxed font-medium">
               Ultra low-latency P2P video calls, real-time messaging, multi-user audio studio, and AI chat assistants.
@@ -663,7 +739,7 @@ export default function Home() {
           </div>
 
           <div className="text-[11px] text-slate-600 font-medium">
-            © 2026 SyncPulse Pro · AMOLED Matte Architecture
+            © 2026 SyncPulse Pro · AMOLED AI Architecture
           </div>
         </div>
 
@@ -671,7 +747,7 @@ export default function Home() {
           <form onSubmit={handleRegister} className="w-full max-w-sm space-y-5">
             <div className="lg:hidden flex flex-col items-center mb-2 text-center">
               <div className="w-14 h-14 rounded-2xl bg-red-500 flex items-center justify-center text-white mb-2 shadow-lg">
-                <Zap size={28} />
+                <AiSparkleIcon size={30} />
               </div>
               <h1 className="text-xl font-extrabold text-white">SyncPulse Pro</h1>
             </div>
@@ -693,8 +769,8 @@ export default function Home() {
                 <input type="text" value={userName} onChange={(e) => setUserName(e.target.value)} placeholder="e.g. Sara Sanders" className="matte-input" required autoFocus />
               </div>
 
-              <button type="submit" className="app-btn app-btn-primary w-full py-3 text-xs font-bold shadow-md">
-                <Sparkles size={15} /> Enter Workspace
+              <button type="submit" className="app-btn app-btn-primary w-full py-3 text-xs font-bold shadow-md flex items-center justify-center gap-2">
+                <AiSparkleIcon size={16} /> Enter Workspace
               </button>
             </div>
           </form>
@@ -703,7 +779,7 @@ export default function Home() {
     );
   }
 
-  /* Main Workspace */
+  /* Main App */
   return (
     <div className="fixed inset-0 w-screen h-screen flex flex-col md:flex-row overflow-hidden bg-black">
       <input type="file" ref={fileInputRef} onChange={handleFileUpload} className="hidden" />
@@ -732,7 +808,7 @@ export default function Home() {
 
       {busyNotice && (
         <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-xl matte-card text-white text-xs font-medium shadow-2xl flex items-center gap-2">
-          <Activity size={14} className="text-red-400 animate-pulse" /> {busyNotice}
+          <Bell size={14} className="text-red-400 animate-pulse" /> {busyNotice}
         </div>
       )}
 
@@ -750,6 +826,14 @@ export default function Home() {
               <NetworkQualityBadge quality={networkQuality.quality} rttMs={networkQuality.rttMs} bitrateKbps={networkQuality.bitrateKbps} />
             </div>
           </div>
+
+          {/* 💬 IN-CALL INCOMING MESSAGE TOAST OVERLAY */}
+          {inCallChatToast && (
+            <div className="absolute top-16 left-1/2 -translate-x-1/2 z-40 px-4 py-2 rounded-xl bg-slate-900/90 border border-white/10 backdrop-blur-xl text-white text-xs font-medium shadow-2xl flex items-center gap-2.5 animate-slide-up">
+              <MessageSquare size={14} className="text-red-400 shrink-0" />
+              <span><strong className="text-red-400">{inCallChatToast.senderName}:</strong> {inCallChatToast.text}</span>
+            </div>
+          )}
 
           {showInviteModal && (
             <div className="fixed inset-0 bg-black/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
@@ -805,23 +889,28 @@ export default function Home() {
           {/* Desktop Left Sidebar */}
           <aside className="hidden md:flex w-16 shrink-0 flex-col items-center py-4 gap-3 bg-[#08090c] border-r border-white/10">
             <div className="w-9 h-9 rounded-xl bg-red-500 flex items-center justify-center text-white mb-2">
-              <Zap size={18} />
+              <AiSparkleIcon size={20} />
             </div>
 
             {([
               { key: 'chats' as Screen, icon: MessageSquare, label: 'Chats' },
               { key: 'calls' as Screen, icon: PhoneCall, label: 'Calls' },
-              { key: 'friends' as Screen, icon: Users, label: 'Friends' },
-              { key: 'ai-studio' as Screen, icon: Wand2, label: 'AI Studio' },
+              { key: 'friends' as Screen, icon: Users, label: 'Friends', badge: friendRequests.length },
+              { key: 'ai-studio' as Screen, icon: Wand2, label: 'AI' },
               { key: 'profile' as Screen, icon: UserIcon, label: 'Profile' },
               { key: 'settings' as Screen, icon: Settings, label: 'Settings' },
             ]).map((nav) => {
               const active = screen === nav.key;
               return (
                 <button key={nav.key} onClick={() => { setScreen(nav.key); if (nav.key !== 'chats') setSelectedContact(null); }}
-                  className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all ${active ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 'text-slate-400 hover:text-white'}`}
+                  className={`relative w-10 h-10 rounded-xl flex items-center justify-center transition-all ${active ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 'text-slate-400 hover:text-white'}`}
                   title={nav.label}>
                   <nav.icon size={18} />
+                  {nav.badge && nav.badge > 0 ? (
+                    <span className="absolute -top-1 -right-1 px-1.5 py-0.2 rounded-full text-[9px] font-extrabold bg-red-500 text-white">
+                      {nav.badge}
+                    </span>
+                  ) : null}
                 </button>
               );
             })}
@@ -837,7 +926,7 @@ export default function Home() {
             </button>
           </aside>
 
-          {/* Sub-Page 1: CHATS (Compact Sleek Avatars) */}
+          {/* Sub-Page 1: CHATS */}
           {screen === 'chats' && (
             <div className="flex-1 flex h-full overflow-hidden">
               <div className={`${selectedContact ? 'hidden md:flex' : 'flex'} w-full md:w-80 flex-col shrink-0 h-full p-3 bg-[#08090c] border-r border-white/10`}>
@@ -846,13 +935,13 @@ export default function Home() {
                     <img src={registeredUser.avatar} alt="" className="w-8 h-8 rounded-full object-cover ring-1 ring-white/10" />
                     <h2 className="text-base font-bold text-white tracking-tight">Chats</h2>
                   </div>
-                  <button onClick={() => setScreen('friends')} className="w-7 h-7 rounded-lg bg-red-500 text-white flex items-center justify-center" title="Add Contact">
+                  <button onClick={() => setScreen('friends')} className="w-7 h-7 rounded-lg bg-red-500 text-white flex items-center justify-center" title="Add Contact / Friend">
                     <Plus size={16} />
                   </button>
                 </div>
 
                 <div className="relative mb-3">
-                  <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Search..." className="matte-input !py-1.5 text-xs pl-8" />
+                  <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Search friends & messages..." className="matte-input !py-1.5 text-xs pl-8" />
                   <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
                 </div>
 
@@ -867,15 +956,14 @@ export default function Home() {
                       <div key={c.id} onClick={() => setSelectedContact(c)}
                         className={`flex items-center gap-2.5 p-2.5 rounded-xl cursor-pointer transition-all ${isSel ? 'bg-white/10 border border-white/10' : 'hover:bg-white/5'}`}>
                         <div className="relative shrink-0">
-                          {/* Sleek Compact Avatar */}
                           <img src={c.avatar} alt="" className="w-9 h-9 rounded-full object-cover ring-1 ring-white/10" />
                           <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full" style={{ background: isAi ? '#ff453a' : '#30d158', border: '2px solid #08090c' }} />
                         </div>
 
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between">
-                            <span className="text-xs font-semibold truncate text-white">
-                              {c.name}
+                            <span className="text-xs font-semibold truncate text-white flex items-center gap-1">
+                              {c.name} {isAi && <AiSparkleIcon size={12} />}
                             </span>
                             {last && (
                               <span className="text-[10px] shrink-0 font-medium text-slate-500">
@@ -885,7 +973,7 @@ export default function Home() {
                           </div>
                           <div className="flex items-center justify-between mt-0.5">
                             <p className="text-[11px] truncate text-slate-400 font-normal">
-                              {last ? (last.isEdited ? `${last.text} (edited)` : last.text) : (isAi ? 'Ask PulseAI...' : 'Tap to open')}
+                              {last ? (last.isDeleted ? '🚫 Message deleted' : (last.isEdited ? `${last.text} (edited)` : last.text)) : (isAi ? 'Ask PulseAI anything...' : 'Tap to open chat')}
                             </p>
                             {unread > 0 && (
                               <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold bg-red-500 text-white shrink-0">
@@ -900,7 +988,7 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* Chat Conversation View */}
+              {/* Chat View */}
               {selectedContact ? (
                 <div className="flex-1 flex flex-col h-full overflow-hidden bg-[#0d0e12]">
                   <div className="flex items-center justify-between px-4 h-14 shrink-0 bg-[#08090c] border-b border-white/10">
@@ -910,13 +998,15 @@ export default function Home() {
                       </button>
                       <img src={selectedContact.avatar} alt="" className="w-8 h-8 rounded-full object-cover ring-1 ring-white/10" />
                       <div>
-                        <h4 className="text-xs font-bold text-white">{selectedContact.name}</h4>
+                        <h4 className="text-xs font-bold text-white flex items-center gap-1">
+                          {selectedContact.name} {selectedContact.id === AI_BOT_USER.id && <AiSparkleIcon size={12} />}
+                        </h4>
                         <span className="text-[10px] text-emerald-400">Active Now</span>
                       </div>
                     </div>
 
                     <div className="flex items-center gap-2">
-                      <button onClick={handleSummarizeChat} className="p-2 text-slate-400 hover:text-white" title="Summarize"><Bot size={16} /></button>
+                      <button onClick={handleSummarizeChat} className="p-2 text-slate-400 hover:text-white" title="AI Summarize"><Bot size={16} /></button>
                       {selectedContact.id !== AI_BOT_USER.id && (
                         <>
                           <button onClick={() => startCall(selectedContact, false)} className="p-2 text-slate-400 hover:text-emerald-400"><Phone size={16} /></button>
@@ -935,6 +1025,7 @@ export default function Home() {
                     </div>
                   )}
 
+                  {/* Thread */}
                   <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
                     <div className="flex justify-center">
                       <span className="text-[10px] text-slate-500 px-3 py-1 rounded-full bg-slate-900 border border-white/5">Today</span>
@@ -946,18 +1037,41 @@ export default function Home() {
 
                       return (
                         <div key={msg.id} className={`group relative flex ${isMe ? 'justify-end' : 'justify-start'} anim-slide-up`}>
-                          <div className={`absolute -top-3 ${isMe ? 'right-2' : 'left-2'} hidden group-hover:flex items-center gap-1 z-30 px-2 py-0.5 rounded-full bg-slate-900 border border-white/10`}>
-                            {EMOJI_REACTIONS.slice(0, 4).map(emoji => (
-                              <button key={emoji} onClick={() => handleAddReaction(msg.id, emoji)} className="text-xs hover:scale-125 px-0.5">{emoji}</button>
-                            ))}
-                          </div>
+                          {/* 💬 Message Hover Action Menu */}
+                          {!msg.isDeleted && (
+                            <div className={`absolute -top-3.5 ${isMe ? 'right-2' : 'left-2'} hidden group-hover:flex items-center gap-1 z-30 px-2 py-0.5 rounded-full bg-slate-900 border border-white/10 shadow-lg`}>
+                              {EMOJI_REACTIONS.map(emoji => (
+                                <button key={emoji} onClick={() => handleAddReaction(msg.id, emoji)} className="text-xs hover:scale-130 transition-transform px-0.5">{emoji}</button>
+                              ))}
+                              <button onClick={() => setReplyingTo(msg)} className="p-0.5 text-slate-400 hover:text-white" title="Reply"><Reply size={12} /></button>
+                              {isMe && (
+                                <>
+                                  <button onClick={() => { setEditingMessage(msg); setInputText(msg.text); }} className="p-0.5 text-slate-400 hover:text-red-400" title="Edit"><Edit2 size={12} /></button>
+                                  <button onClick={() => handleDeleteMessage(msg.id)} className="p-0.5 text-slate-400 hover:text-red-400" title="Delete"><Trash2 size={12} /></button>
+                                </>
+                              )}
+                            </div>
+                          )}
 
                           {emojiOnly ? (
                             <div className="text-4xl py-1">{msg.text}</div>
                           ) : (
                             <div className={`max-w-[80%] md:max-w-[65%] px-3.5 py-2 text-xs leading-relaxed ${isMe ? 'bg-red-500 text-white rounded-2xl rounded-tr-xs' : 'matte-card text-white rounded-2xl rounded-tl-xs'}`}>
-                              <p className="break-words whitespace-pre-line">{msg.text}</p>
+                              <p className={`break-words whitespace-pre-line ${msg.isDeleted ? 'italic text-slate-400' : ''}`}>{msg.text}</p>
+                              
+                              {/* Reactions Pill */}
+                              {msg.reactions && msg.reactions.length > 0 && (
+                                <div className="flex gap-1 mt-1 flex-wrap">
+                                  {msg.reactions.map((r, i) => (
+                                    <span key={i} className="text-[10px] px-1.5 py-0.2 rounded-full bg-black/30 border border-white/10 text-white">
+                                      {r.emoji}
+                                    </span>
+                                  ))}
+                                </div>
+                              )}
+
                               <div className={`flex items-center justify-end gap-1 mt-1 text-[9px] ${isMe ? 'text-red-100' : 'text-slate-500'}`}>
+                                {msg.isEdited && <span className="italic mr-0.5">(edited)</span>}
                                 <span>{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                                 {isMe && <span>{msg.status === 'read' ? <CheckCheck size={12} /> : <Check size={12} />}</span>}
                               </div>
@@ -970,24 +1084,50 @@ export default function Home() {
                     {isAiThinking && (
                       <div className="flex justify-start">
                         <div className="matte-card px-3 py-2 text-xs text-red-400 flex items-center gap-1.5">
-                          <Sparkles size={14} className="animate-spin" /> PulseAI is typing...
+                          <AiSparkleIcon size={14} className="animate-spin" /> PulseAI is thinking...
                         </div>
                       </div>
                     )}
                     <div ref={messagesEndRef} />
                   </div>
 
+                  {/* 💬 Quoted Reply Banner */}
+                  {replyingTo && (
+                    <div className="px-4 py-2 flex items-center justify-between text-xs bg-slate-900 border-t border-white/10 text-slate-300">
+                      <div className="flex items-center gap-2 truncate">
+                        <Reply size={13} className="text-red-400 shrink-0" />
+                        <span>Replying to <strong className="text-white">@{replyingTo.sender.name}</strong>: "{replyingTo.text.slice(0, 35)}..."</span>
+                      </div>
+                      <button onClick={() => setReplyingTo(null)} className="p-0.5 text-slate-400 hover:text-white"><X size={13} /></button>
+                    </div>
+                  )}
+
+                  {/* AI Inline Quick Dropdown */}
+                  {showAiMenu && (
+                    <div className="px-4 py-2 bg-slate-900 border-t border-white/10 flex items-center gap-2 overflow-x-auto text-xs animate-slide-up">
+                      <span className="text-[10px] font-bold text-red-400 shrink-0 flex items-center gap-1"><AiSparkleIcon size={12} /> Rephrase AI:</span>
+                      <button type="button" onClick={() => handleInlineAiEnhance('professional')} className="px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-white shrink-0">💼 Professional</button>
+                      <button type="button" onClick={() => handleInlineAiEnhance('concise')} className="px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-white shrink-0">⚡ Concise</button>
+                      <button type="button" onClick={() => handleInlineAiEnhance('casual')} className="px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-white shrink-0">💬 Casual</button>
+                      <button type="button" onClick={() => handleInlineAiEnhance('translate')} className="px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/10 text-white shrink-0">🌐 Translate</button>
+                    </div>
+                  )}
+
+                  {/* Input Bar */}
                   <form onSubmit={(e) => { e.preventDefault(); handleSendMessage(); }} className="px-3 py-2.5 flex items-center gap-2 bg-[#08090c] border-t border-white/10">
-                    <button type="button" onClick={() => fileInputRef.current?.click()} className="p-2 text-slate-400 hover:text-white"><Paperclip size={16} /></button>
+                    <button type="button" onClick={() => setShowAiMenu(!showAiMenu)} className="p-1.5 text-red-400 hover:scale-110 transition-transform" title="✨ AI Inline Rephrase">
+                      <AiSparkleIcon size={18} />
+                    </button>
+                    <button type="button" onClick={() => fileInputRef.current?.click()} className="p-1.5 text-slate-400 hover:text-white"><Paperclip size={16} /></button>
                     <input type="text" value={inputText} onChange={(e) => setInputText(e.target.value)} placeholder="Type a message..." className="matte-input flex-1 !py-2 text-xs" />
-                    <button type="button" onClick={() => setIsVoiceRecording(true)} className="p-2 text-slate-400 hover:text-white"><Mic size={16} /></button>
+                    <button type="button" onClick={() => setIsVoiceRecording(true)} className="p-1.5 text-slate-400 hover:text-white"><Mic size={16} /></button>
                     <button type="submit" disabled={!inputText.trim()} className="app-btn app-btn-primary p-2 rounded-xl disabled:opacity-30"><Send size={15} /></button>
                   </form>
                 </div>
               ) : (
                 <div className="hidden md:flex flex-1 flex-col items-center justify-center bg-[#0d0e12]">
-                  <MessageSquare size={32} className="text-slate-600 mb-2" />
-                  <p className="text-xs text-slate-400">Select a contact to start chatting</p>
+                  <AiSparkleIcon size={36} />
+                  <p className="text-xs text-slate-400 mt-2">Select a contact or PulseAI to start chatting</p>
                 </div>
               )}
             </div>
@@ -1009,8 +1149,8 @@ export default function Home() {
                 </div>
 
                 <div className="space-y-2">
-                  <h3 className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Active Friends ({friendObjects.length})</h3>
-                  {friendObjects.map((u) => (
+                  <h3 className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Active Friends ({friendUserObjects.length})</h3>
+                  {friendUserObjects.map((u) => (
                     <div key={u.id} className="flex items-center justify-between p-3 matte-card">
                       <div className="flex items-center gap-2.5">
                         <img src={u.avatar} alt="" className="w-8 h-8 rounded-full object-cover ring-1 ring-white/10" />
@@ -1035,35 +1175,45 @@ export default function Home() {
                 <div className="flex gap-1.5">
                   <button onClick={() => setFriendsTab('find')} className={`px-3 py-1 rounded-lg text-xs font-medium ${friendsTab === 'find' ? 'bg-red-500 text-white' : 'text-slate-400'}`}>Online ({others.length})</button>
                   <button onClick={() => setFriendsTab('friends')} className={`px-3 py-1 rounded-lg text-xs font-medium ${friendsTab === 'friends' ? 'bg-red-500 text-white' : 'text-slate-400'}`}>Friends ({friends.length})</button>
-                  <button onClick={() => setFriendsTab('requests')} className={`px-3 py-1 rounded-lg text-xs font-medium ${friendsTab === 'requests' ? 'bg-red-500 text-white' : 'text-slate-400'}`}>Requests ({friendRequests.length})</button>
+                  <button onClick={() => setFriendsTab('requests')} className={`relative px-3 py-1 rounded-lg text-xs font-medium ${friendsTab === 'requests' ? 'bg-red-500 text-white' : 'text-slate-400'}`}>
+                    Requests {friendRequests.length > 0 && <span className="ml-1 px-1.5 py-0.2 rounded-full text-[9px] bg-red-500 text-white">{friendRequests.length}</span>}
+                  </button>
                 </div>
               </div>
 
               <div className="flex-1 overflow-y-auto p-4 space-y-2">
-                {friendsTab === 'find' && others.map((u) => {
-                  const isAlreadyFriend = isFriend(u.id);
-                  const isSent = sentRequests.includes(u.id);
-                  return (
-                    <div key={u.id} className="flex items-center justify-between p-3 matte-card">
-                      <div className="flex items-center gap-2.5">
-                        <img src={u.avatar} alt="" className="w-8 h-8 rounded-full object-cover ring-1 ring-white/10" />
-                        <div>
-                          <h4 className="text-xs font-bold text-white">{u.name}</h4>
-                          <span className="text-[10px] text-emerald-400">● Active Online</span>
-                        </div>
-                      </div>
-                      {isAlreadyFriend ? (
-                        <span className="text-[10px] text-emerald-400 font-semibold">Friends</span>
-                      ) : isSent ? (
-                        <span className="text-[10px] text-amber-400 font-semibold">Sent</span>
-                      ) : (
-                        <button onClick={() => sendFriendRequest(u)} className="app-btn app-btn-primary px-3 py-1.5 text-xs"><UserPlus size={13} /> Add</button>
-                      )}
+                {friendsTab === 'find' && (
+                  others.length === 0 ? (
+                    <div className="matte-card p-8 text-center text-xs text-slate-400">
+                      No other users online right now. Open another browser tab to test!
                     </div>
-                  );
-                })}
+                  ) : (
+                    others.map((u) => {
+                      const isAlreadyFriend = isFriend(u.id);
+                      const isSent = sentRequests.includes(u.id);
+                      return (
+                        <div key={u.id} className="flex items-center justify-between p-3 matte-card">
+                          <div className="flex items-center gap-2.5">
+                            <img src={u.avatar} alt="" className="w-8 h-8 rounded-full object-cover ring-1 ring-white/10" />
+                            <div>
+                              <h4 className="text-xs font-bold text-white">{u.name}</h4>
+                              <span className="text-[10px] text-emerald-400">● Active Online</span>
+                            </div>
+                          </div>
+                          {isAlreadyFriend ? (
+                            <span className="text-[10px] text-emerald-400 font-semibold">Friends</span>
+                          ) : isSent ? (
+                            <span className="text-[10px] text-amber-400 font-semibold">Request Sent</span>
+                          ) : (
+                            <button onClick={() => sendFriendRequest(u)} className="app-btn app-btn-primary px-3 py-1.5 text-xs"><UserPlus size={13} /> Add Friend</button>
+                          )}
+                        </div>
+                      );
+                    })
+                  )
+                )}
 
-                {friendsTab === 'friends' && friendObjects.map((u) => (
+                {friendsTab === 'friends' && friendUserObjects.map((u) => (
                   <div key={u.id} className="flex items-center justify-between p-3 matte-card">
                     <div className="flex items-center gap-2.5">
                       <img src={u.avatar} alt="" className="w-8 h-8 rounded-full object-cover ring-1 ring-white/10" />
@@ -1076,18 +1226,24 @@ export default function Home() {
                   </div>
                 ))}
 
-                {friendsTab === 'requests' && friendRequests.map((u) => (
-                  <div key={u.id} className="flex items-center justify-between p-3 matte-card">
-                    <div className="flex items-center gap-2.5">
-                      <img src={u.avatar} alt="" className="w-8 h-8 rounded-full object-cover ring-1 ring-white/10" />
-                      <span className="text-xs font-bold text-white">{u.name}</span>
-                    </div>
-                    <div className="flex gap-2">
-                      <button onClick={() => rejectFriendRequest(u)} className="px-3 py-1 rounded-lg text-xs bg-red-500/20 text-red-400">Decline</button>
-                      <button onClick={() => acceptFriendRequest(u)} className="app-btn app-btn-primary px-3 py-1 text-xs">Accept</button>
-                    </div>
-                  </div>
-                ))}
+                {friendsTab === 'requests' && (
+                  friendRequests.length === 0 ? (
+                    <div className="matte-card p-8 text-center text-xs text-slate-400">No pending friend requests</div>
+                  ) : (
+                    friendRequests.map((u) => (
+                      <div key={u.id} className="flex items-center justify-between p-3 matte-card">
+                        <div className="flex items-center gap-2.5">
+                          <img src={u.avatar} alt="" className="w-8 h-8 rounded-full object-cover ring-1 ring-white/10" />
+                          <span className="text-xs font-bold text-white">{u.name}</span>
+                        </div>
+                        <div className="flex gap-2">
+                          <button onClick={() => rejectFriendRequest(u)} className="px-3 py-1 rounded-lg text-xs bg-red-500/20 text-red-400">Decline</button>
+                          <button onClick={() => acceptFriendRequest(u)} className="app-btn app-btn-primary px-3 py-1 text-xs">Accept</button>
+                        </div>
+                      </div>
+                    ))
+                  )
+                )}
               </div>
             </div>
           )}
@@ -1096,16 +1252,16 @@ export default function Home() {
           {screen === 'ai-studio' && (
             <div className="flex-1 flex flex-col h-full overflow-y-auto bg-[#0d0e12]">
               <div className="px-5 h-14 flex items-center bg-[#08090c] border-b border-white/10">
-                <h2 className="text-sm font-bold text-white flex items-center gap-2"><Wand2 size={16} className="text-red-400" /> AI Studio</h2>
+                <h2 className="text-sm font-bold text-white flex items-center gap-2"><AiSparkleIcon size={16} /> AI Studio</h2>
               </div>
               <div className="p-4 max-w-xl mx-auto w-full space-y-4">
                 <div className="matte-card p-4 space-y-3">
-                  <h3 className="text-xs font-bold text-white">Message Polisher</h3>
+                  <h3 className="text-xs font-bold text-white flex items-center gap-2"><AiSparkleIcon size={14} /> Message Polisher</h3>
                   <textarea rows={3} value={aiPolishInput} onChange={(e) => setAiPolishInput(e.target.value)} placeholder="Draft rough text..." className="matte-input text-xs resize-none" />
                   <button onClick={async () => {
                     if (!aiPolishInput.trim()) return;
                     setIsAiThinking(true);
-                    const res = await rephraseText(aiPolishInput, aiPolishStyle);
+                    const res = await rephraseText(aiPolishInput, 'professional');
                     setIsAiThinking(false);
                     setAiPolishOutput(res);
                   }} className="app-btn app-btn-primary px-4 py-2 text-xs">Rephrase</button>
@@ -1159,12 +1315,12 @@ export default function Home() {
             </div>
           )}
 
-          {/* Ultra Sleek Mobile Bottom Navigation Bar */}
+          {/* Mobile Bottom Bar */}
           <nav className="md:hidden flex items-center justify-around h-14 shrink-0 z-40 bg-black/95 backdrop-blur-2xl border-t border-white/10 px-2">
             {([
               { key: 'chats' as Screen, icon: MessageSquare, label: 'Chats' },
               { key: 'calls' as Screen, icon: PhoneCall, label: 'Calls' },
-              { key: 'friends' as Screen, icon: Users, label: 'Friends' },
+              { key: 'friends' as Screen, icon: Users, label: 'Friends', badge: friendRequests.length },
               { key: 'ai-studio' as Screen, icon: Wand2, label: 'AI' },
               { key: 'profile' as Screen, icon: UserIcon, label: 'Profile' },
               { key: 'settings' as Screen, icon: Settings, label: 'Settings' },
@@ -1172,9 +1328,14 @@ export default function Home() {
               const active = screen === nav.key;
               return (
                 <button key={nav.key} onClick={() => { setScreen(nav.key); if (nav.key !== 'chats') setSelectedContact(null); }}
-                  className={`flex flex-col items-center justify-center gap-0.5 px-3 py-1 rounded-xl transition-all ${active ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 'text-slate-400'}`}>
+                  className={`relative flex flex-col items-center justify-center gap-0.5 px-3 py-1 rounded-xl transition-all ${active ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 'text-slate-400'}`}>
                   <nav.icon size={16} />
                   <span className="text-[9px] font-bold">{nav.label}</span>
+                  {nav.badge && nav.badge > 0 ? (
+                    <span className="absolute -top-1 -right-1 px-1.5 py-0.2 rounded-full text-[8px] font-extrabold bg-red-500 text-white">
+                      {nav.badge}
+                    </span>
+                  ) : null}
                 </button>
               );
             })}

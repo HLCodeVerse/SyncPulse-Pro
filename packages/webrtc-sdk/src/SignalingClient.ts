@@ -297,6 +297,13 @@ export class SignalingClient {
     });
   }
 
+  public deleteMessage(messageId: string, targetUserId: string) {
+    this.postServerlessSignal('chat:updated', targetUserId, undefined, {
+      messageId,
+      message: { text: '🚫 This message was deleted', isDeleted: true }
+    });
+  }
+
   public markMessagesRead(targetUserId: string, messageIds: string[]) {
     this.socket.emit('chat:read', { targetUserId, messageIds });
   }

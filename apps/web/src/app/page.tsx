@@ -612,6 +612,7 @@ export default function Home() {
   }, [selectedContact]);
 
   const registeredUserRef = useRef(registeredUser);
+  const lastRegisteredUserIdRef = useRef<string | null>(null);
   useEffect(() => {
     registeredUserRef.current = registeredUser;
     if (registeredUser) {
@@ -630,10 +631,13 @@ export default function Home() {
   /* Dedicated Effect to Connect and Register on Login/Session Restore */
   useEffect(() => {
     if (registeredUser && sigRef.current) {
-      if (!(sigRef.current as any).socket?.connected) {
-        sigRef.current.connect();
+      if (lastRegisteredUserIdRef.current !== registeredUser.id || !(sigRef.current as any).socket?.connected) {
+        lastRegisteredUserIdRef.current = registeredUser.id;
+        if (!(sigRef.current as any).socket?.connected) {
+          sigRef.current.connect();
+        }
+        sigRef.current.register(registeredUser as any);
       }
-      sigRef.current.register(registeredUser as any);
     }
   }, [registeredUser]);
 
@@ -1132,10 +1136,8 @@ export default function Home() {
       if (document.visibilityState === 'visible') {
         sendHeartbeat();
         fetchUsersAndFriendships();
-        if (sigRef.current) {
-          if (!(sigRef.current as any).socket?.connected) {
-            sigRef.current.connect();
-          }
+        if (sigRef.current && !(sigRef.current as any).socket?.connected) {
+          sigRef.current.connect();
           sigRef.current.register(registeredUser);
         }
       }

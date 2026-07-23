@@ -1128,15 +1128,39 @@ export default function Home() {
       } catch (e) {}
     };
 
+    const handleVisibility = () => {
+      if (document.visibilityState === 'visible') {
+        sendHeartbeat();
+        fetchUsersAndFriendships();
+        if (sigRef.current) {
+          if (!(sigRef.current as any).socket?.connected) {
+            sigRef.current.connect();
+          }
+          sigRef.current.register(registeredUser);
+        }
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibility);
+
     sendHeartbeat();
     fetchUsersAndFriendships();
 
     const interval = setInterval(() => {
       sendHeartbeat();
       fetchUsersAndFriendships();
+
+      if (sigRef.current) {
+        if (!(sigRef.current as any).socket?.connected) {
+          sigRef.current.connect();
+          sigRef.current.register(registeredUser);
+        }
+      }
     }, 2500);
 
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener('visibilitychange', handleVisibility);
+    };
   }, [registeredUser]);
 
   /* Reactive Status Fusion with Signaling Presence */
@@ -1302,6 +1326,8 @@ export default function Home() {
               remoteStreams={remoteStreams}
               participants={participants}
               screenStream={screenStream}
+              onSwitchCamera={() => pmRef.current?.switchCamera()}
+              onToggleFlash={(on) => pmRef.current?.toggleFlash(on)}
             />
           </div>
 

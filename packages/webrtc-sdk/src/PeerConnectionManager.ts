@@ -390,4 +390,60 @@ export class PeerConnectionManager {
   public getRemoteStream(socketId: string): MediaStream | undefined {
     return this.remoteStreams.get(socketId);
   }
+
+  private currentFacingMode: 'user' | 'environment' = 'user';
+  private isFlashOn: boolean = false;
+
+  public async switchCamera() {
+    if (!this.localStream) return;
+    this.currentFacingMode = this.currentFacingMode === 'user' ? 'environment' : 'user';
+    
+    // Stop current video tracks
+    this.localStream.getVideoTracks().forEach(track => track.stop());
+
+    try {
+      // Get new video track with new facingMode
+      const newStream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          facingMode: this.currentFacingMode,
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        }
+      });
+
+      const newTrack = newStream.getVideoTracks()[0];
+      const oldTrack = this.localStream.getVideoTracks()[0];
+      if (oldTrack) {
+        this.localStream.removeTrack(oldTrack);
+      }
+      this.localStream.addTrack(newTrack);
+
+      // Replace track in all peer connections
+      for (const pc of this.peerConnections.values()) {
+        const sender = pc.getSenders().find(s => s.track?.kind === 'video');
+        if (sender && newTrack) {
+          await sender.replaceTrack(newTrack);
+        }
+      }
+
+      this.callbacks.onLocalStream?.(this.localStream);
+    } catch (err) {
+      console.error('Failed to switch camera:', err);
+    }
+  }
+
+  public async toggleFlash(on: boolean) {
+    if (!this.localStream) return;
+    const track = this.localStream.getVideoTracks()[0];
+    if (track) {
+      try {
+        this.isFlashOn = on;
+        await track.applyConstraints({
+          advanced: [{ torch: on } as any]
+        });
+      } catch (e) {
+        console.warn("Flash/Torch control is not supported on this device/browser.", e);
+      }
+    }
+  }
 }

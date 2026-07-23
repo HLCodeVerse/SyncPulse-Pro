@@ -86,6 +86,7 @@ CREATE TABLE IF NOT EXISTS public.messages (
   reactions JSONB DEFAULT '[]'::jsonb,
   is_edited BOOLEAN DEFAULT FALSE,
   is_deleted BOOLEAN DEFAULT FALSE,
+  status TEXT DEFAULT 'sent',
   created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 

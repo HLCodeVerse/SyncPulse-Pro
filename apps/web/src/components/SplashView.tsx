@@ -5,15 +5,32 @@ import { AnimatedBellIcon } from '../../../../packages/icons/src/AnimatedIcons';
 
 export function AiSparkleIcon({ size = 20, className = '' }: { size?: number; className?: string }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className={`shrink-0 ${className}`}>
-      <circle cx="12" cy="12" r="9" stroke="url(#aiGrad)" strokeWidth="1.5" strokeDasharray="3 3" className="animate-spin" style={{ animationDuration: '6s' }} />
-      <path d="M12 3V6M12 18V21M3 12H6M18 12H21M6.343 6.343L8.464 8.464M15.536 15.536L17.657 17.657M6.343 17.657L8.464 15.536M15.536 8.464L17.657 6.343" stroke="url(#aiGrad)" strokeWidth="1.2" strokeLinecap="round" />
-      <path d="M12 8L13.2 10.8L16 12L13.2 13.2L12 16L10.8 13.2L8 12L10.8 10.8L12 8Z" fill="url(#aiGrad)" className="animate-pulse" />
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" className={`shrink-0 ${className}`} style={{ filter: 'drop-shadow(0 0 4px rgba(0,240,255,0.4))' }}>
+      <style>{`
+        @keyframes aiCoreScale { 0%, 100% { transform: scale(1); opacity: 0.95; } 50% { transform: scale(1.15); opacity: 1; } }
+        @keyframes aiRingSpin1 { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        @keyframes aiRingSpin2 { from { transform: rotate(120deg); } to { transform: rotate(480deg); } }
+        @keyframes aiSparklePulse { 0%, 100% { opacity: 0.2; } 50% { opacity: 1; } }
+      `}</style>
+      
+      {/* Outer Orbit Rings */}
+      <circle cx="12" cy="12" r="10" stroke="url(#aiNeonGrad)" strokeWidth="1" strokeDasharray="2 3" style={{ transformOrigin: '12px 12px', animation: 'aiRingSpin1 8s linear infinite' }} />
+      <circle cx="12" cy="12" r="8" stroke="url(#aiNeonGrad)" strokeWidth="1.2" strokeDasharray="5 2" style={{ transformOrigin: '12px 12px', animation: 'aiRingSpin2 5s linear infinite' }} />
+      
+      {/* Central Morphing Core */}
+      <path d="M12 6.5C8.96 6.5 6.5 8.96 6.5 12C6.5 15.04 8.96 17.5 12 17.5C15.04 17.5 17.5 15.04 17.5 12C17.5 8.96 15.04 6.5 12 6.5ZM12 8.5C13.93 8.5 15.5 10.07 15.5 12C15.5 13.93 13.93 15.5 12 15.5C10.07 15.5 8.5 13.93 8.5 12C8.5 10.07 10.07 8.5 12 8.5Z" fill="url(#aiNeonGrad)" style={{ transformOrigin: '12px 12px', animation: 'aiCoreScale 2.4s ease-in-out infinite' }} />
+      
+      {/* Spark Dots */}
+      <circle cx="6" cy="6" r="1" fill="#00f0ff" style={{ animation: 'aiSparklePulse 1.5s ease-in-out infinite', animationDelay: '0ms' }} />
+      <circle cx="18" cy="6" r="1" fill="#ff007f" style={{ animation: 'aiSparklePulse 1.5s ease-in-out infinite', animationDelay: '500ms' }} />
+      <circle cx="18" cy="18" r="1.2" fill="#7b2cbf" style={{ animation: 'aiSparklePulse 1.8s ease-in-out infinite', animationDelay: '900ms' }} />
+      <circle cx="6" cy="18" r="0.8" fill="#00f0ff" style={{ animation: 'aiSparklePulse 2s ease-in-out infinite', animationDelay: '300ms' }} />
+
       <defs>
-        <linearGradient id="aiGrad" x1="0" y1="0" x2="24" y2="24" gradientUnits="userSpaceOnUse">
-          <stop stopColor="#ff453a" />
-          <stop offset="0.5" stopColor="#bf5af2" />
-          <stop offset="1" stopColor="#30d158" />
+        <linearGradient id="aiNeonGrad" x1="2" y1="2" x2="22" y2="22" gradientUnits="userSpaceOnUse">
+          <stop stopColor="#00f0ff" />
+          <stop offset="0.5" stopColor="#ff007f" />
+          <stop offset="1" stopColor="#7b2cbf" />
         </linearGradient>
       </defs>
     </svg>

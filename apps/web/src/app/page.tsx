@@ -238,6 +238,7 @@ export default function Home() {
   const audioChunksRef = useRef<Blob[]>([]);
   const recordingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isTypingRef = useRef(false);
 
   const [showAttachmentMenu, setShowAttachmentMenu] = useState(false);
   const [showCameraModal, setShowCameraModal] = useState(false);
@@ -327,15 +328,19 @@ export default function Home() {
     const isAi = selectedContact.id === AI_BOT_USER.id;
     if (isAi) return;
 
-    sigRef.current?.sendTypingStatus(selectedContact.id, true);
+    if (!isTypingRef.current) {
+      isTypingRef.current = true;
+      sigRef.current?.sendTypingStatus(selectedContact.id, true);
+    }
 
     if (typingTimeoutRef.current) {
       clearTimeout(typingTimeoutRef.current);
     }
 
     typingTimeoutRef.current = setTimeout(() => {
+      isTypingRef.current = false;
       sigRef.current?.sendTypingStatus(selectedContact.id, false);
-    }, 1500);
+    }, 2000);
   };
 
   const capturePhoto = () => {
@@ -541,6 +546,18 @@ export default function Home() {
     const syncMessages = () => {
       fetchRoomMessagesFromDb(roomId).then((dbMsgs) => {
         if (dbMsgs && dbMsgs.length > 0) {
+          // Find unread messages from the other user and mark them read
+          const unreadMsgs = dbMsgs.filter(m => m.sender_id === selectedContact.id && m.status !== 'read');
+          if (unreadMsgs.length > 0) {
+            const unreadIds = unreadMsgs.map(m => m.id);
+            fetch('/api/messages', {
+              method: 'PATCH',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ messageIds: unreadIds, status: 'read' })
+            }).catch(() => {});
+            sigRef.current?.markMessagesRead(selectedContact.id, unreadIds);
+          }
+
           const formattedMsgs: ChatMessage[] = dbMsgs.map(m => ({
             id: m.id,
             roomId: m.room_id,
@@ -549,7 +566,9 @@ export default function Home() {
               : { id: selectedContact.id, name: selectedContact.name, avatar: selectedContact.avatar },
             text: m.text,
             timestamp: new Date(m.created_at).getTime(),
-            status: 'read',
+            status: (m.sender_id === registeredUser.id) 
+              ? (m.status || 'sent') 
+              : ((m.status === 'sent' || m.status === 'delivered') ? 'read' : (m.status || 'read')),
             reactions: m.reactions,
             mediaUrl: m.media_url,
             isEdited: m.is_edited,
@@ -557,16 +576,16 @@ export default function Home() {
           }));
 
           setChatMessages(prev => {
-            const existingIds = new Set(prev.map(x => x.id));
-            let hasNew = false;
-            const combined = [...prev];
-            formattedMsgs.forEach(m => {
-              if (!existingIds.has(m.id)) {
-                combined.push(m);
-                hasNew = true;
+            const idMap = new Map(formattedMsgs.map(m => [m.id, m]));
+            return prev.map(m => {
+              const fresh = idMap.get(m.id);
+              if (fresh) {
+                return { ...m, status: fresh.status, text: fresh.text, isEdited: fresh.isEdited, isDeleted: fresh.isDeleted, reactions: fresh.reactions };
               }
-            });
-            return hasNew ? combined.sort((a, b) => a.timestamp - b.timestamp) : prev;
+              return m;
+            }).concat(
+              formattedMsgs.filter(m => !prev.some(x => x.id === m.id))
+            ).sort((a, b) => a.timestamp - b.timestamp);
           });
         }
       });
@@ -586,6 +605,11 @@ export default function Home() {
   useEffect(() => {
     activeRoomIdRef.current = activeRoomId;
   }, [activeRoomId]);
+
+  const selectedContactRef = useRef(selectedContact);
+  useEffect(() => {
+    selectedContactRef.current = selectedContact;
+  }, [selectedContact]);
 
   const registeredUserRef = useRef(registeredUser);
   useEffect(() => {
@@ -643,10 +667,23 @@ export default function Home() {
     sig.on('room:user-left', ({ socketId }) => setParticipants((prev) => prev.filter((p) => p.socketId !== socketId)));
 
     sig.on('chat:message', (msg) => {
+      const isCurrentChat = selectedContactRef.current?.id === msg.sender.id;
+      const statusUpdate = isCurrentChat ? 'read' : 'delivered';
+
       setChatMessages((prev) => {
         if (prev.some(m => m.id === msg.id)) return prev;
-        return [...prev, { ...msg, status: 'delivered' }];
+        return [...prev, { ...msg, status: statusUpdate }];
       });
+
+      fetch('/api/messages', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messageIds: [msg.id], status: statusUpdate })
+      }).catch(() => {});
+
+      if (isCurrentChat) {
+        sig.markMessagesRead(msg.sender.id, [msg.id]);
+      }
 
       if (activeRoomIdRef.current) {
         setInCallChatToast({ senderName: msg.sender.name, text: msg.text });

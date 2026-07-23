@@ -16,14 +16,14 @@ export async function GET(req: NextRequest) {
     let rows = [];
     if (roomId === 'all') {
       rows = await queryDb(`
-        SELECT id, room_id, sender_id, text, media_url, is_edited, is_deleted, reactions, created_at
+        SELECT id, room_id, sender_id, text, media_url, is_edited, is_deleted, reactions, status, created_at
         FROM public.messages
         ORDER BY created_at DESC
         LIMIT 100;
       `);
     } else {
       rows = await queryDb(`
-        SELECT id, room_id, sender_id, text, media_url, is_edited, is_deleted, reactions, created_at
+        SELECT id, room_id, sender_id, text, media_url, is_edited, is_deleted, reactions, status, created_at
         FROM public.messages
         WHERE room_id = $1
         ORDER BY created_at ASC;
@@ -41,26 +41,28 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
-    const { id, roomId, senderId, text, mediaUrl, reactions } = body;
+    const { id, roomId, senderId, text, mediaUrl, reactions, status } = body;
 
     if (!id || !roomId || !senderId || !text) {
       return NextResponse.json({ success: false, error: 'Missing parameters' }, { status: 400 });
     }
 
     await queryDb(`
-      INSERT INTO public.messages (id, room_id, sender_id, text, media_url, reactions, created_at)
-      VALUES ($1, $2, $3, $4, $5, $6, NOW())
+      INSERT INTO public.messages (id, room_id, sender_id, text, media_url, reactions, status, created_at)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, NOW())
       ON CONFLICT (id) DO UPDATE SET 
         text = EXCLUDED.text,
         is_edited = CASE WHEN public.messages.text != EXCLUDED.text THEN true ELSE public.messages.is_edited END,
-        reactions = COALESCE(EXCLUDED.reactions, public.messages.reactions);
+        reactions = COALESCE(EXCLUDED.reactions, public.messages.reactions),
+        status = COALESCE(EXCLUDED.status, public.messages.status);
     `, [
       id,
       roomId,
       senderId,
       text,
       mediaUrl || null,
-      reactions ? JSON.stringify(reactions) : null
+      reactions ? JSON.stringify(reactions) : null,
+      status || 'sent'
     ]);
 
     return NextResponse.json({ success: true });
@@ -87,6 +89,28 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ success: true });
   } catch (err: any) {
     console.error('Delete Message Error:', err);
+    return NextResponse.json({ success: false, error: err.message }, { status: 500 });
+  }
+}
+
+export async function PATCH(req: NextRequest) {
+  try {
+    const body = await req.json();
+    const { messageIds, status } = body;
+
+    if (!messageIds || !Array.isArray(messageIds) || !status) {
+      return NextResponse.json({ success: false, error: 'Missing parameters' }, { status: 400 });
+    }
+
+    await queryDb(`
+      UPDATE public.messages 
+      SET status = $1 
+      WHERE id = ANY($2);
+    `, [status, messageIds]);
+
+    return NextResponse.json({ success: true });
+  } catch (err: any) {
+    console.error('Update Message Status Error:', err);
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
 }

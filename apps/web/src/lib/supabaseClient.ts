@@ -24,6 +24,7 @@ export interface DbMessage {
   is_edited?: boolean;
   is_deleted?: boolean;
   reactions?: any[];
+  status?: 'sent' | 'delivered' | 'read';
   created_at: string;
 }
 

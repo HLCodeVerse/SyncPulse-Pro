@@ -68,7 +68,7 @@ export function Sidebar({
 
       {/* Mobile Bottom Navigation Bar */}
       {!hideMobileNav && (
-        <nav className="md:hidden flex items-center justify-around h-14 shrink-0 z-40 bg-black/95 backdrop-blur-2xl border-t border-white/10 px-2">
+        <nav className="md:hidden flex items-center justify-around h-14 shrink-0 z-40 bg-black/95 backdrop-blur-2xl border-t border-white/10 px-2 order-last">
           {ALL_NAV_ITEMS.filter(item => ['chats', 'calls', 'friends', 'settings'].includes(item.key)).map((nav) => {
             const active = screen === nav.key;
             return (

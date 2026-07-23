@@ -655,7 +655,7 @@ export default function Home() {
     };
 
     syncMessages();
-    const interval = setInterval(syncMessages, 1500);
+    const interval = setInterval(syncMessages, 3500);
     return () => clearInterval(interval);
   }, [selectedContact, registeredUser]);
 
@@ -1230,7 +1230,7 @@ export default function Home() {
           sigRef.current.register(registeredUser);
         }
       }
-    }, 2500);
+    }, 10000);
 
     return () => {
       clearInterval(interval);

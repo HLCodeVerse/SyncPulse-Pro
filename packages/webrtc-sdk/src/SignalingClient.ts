@@ -121,7 +121,7 @@ export class SignalingClient {
           }
         }
       } catch (e) {}
-    }, 1200);
+    }, 2000);
   }
 
   private handleServerlessEvent(evt: { type: string; payload: any; senderId?: string }) {

@@ -109,6 +109,17 @@ CREATE TABLE IF NOT EXISTS public.system_settings (
   updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- 9. FALLBACK SERVERLESS SIGNALING TABLE
+CREATE TABLE IF NOT EXISTS public.signals (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  type TEXT NOT NULL,
+  payload JSONB NOT NULL,
+  target_user_id TEXT,
+  room_id TEXT,
+  sender_id TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
 -- ROW LEVEL SECURITY (RLS) POLICIES
 ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.friendships ENABLE ROW LEVEL SECURITY;
@@ -117,6 +128,7 @@ ALTER TABLE public.room_participants ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.messages ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.call_logs ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.system_settings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.signals ENABLE ROW LEVEL SECURITY;
 
 DROP POLICY IF EXISTS "Allow All Users Select" ON public.users;
 DROP POLICY IF EXISTS "Allow Users Insert Update Self" ON public.users;
@@ -126,6 +138,7 @@ DROP POLICY IF EXISTS "Allow Room Participant Operations" ON public.room_partici
 DROP POLICY IF EXISTS "Allow Message Operations" ON public.messages;
 DROP POLICY IF EXISTS "Allow Call Log Operations" ON public.call_logs;
 DROP POLICY IF EXISTS "Allow System Settings Operations" ON public.system_settings;
+DROP POLICY IF EXISTS "Allow Signal Operations" ON public.signals;
 
 -- Permissive policies for application operation
 CREATE POLICY "Allow All Users Select" ON public.users FOR SELECT USING (true);
@@ -136,6 +149,7 @@ CREATE POLICY "Allow Room Participant Operations" ON public.room_participants FO
 CREATE POLICY "Allow Message Operations" ON public.messages FOR ALL USING (true);
 CREATE POLICY "Allow Call Log Operations" ON public.call_logs FOR ALL USING (true);
 CREATE POLICY "Allow System Settings Operations" ON public.system_settings FOR ALL USING (true);
+CREATE POLICY "Allow Signal Operations" ON public.signals FOR ALL USING (true);
 
 -- SEED DATA: Default Admin & Test Users
 INSERT INTO public.users (id, phone_number, username, full_name, email, role, bio)

@@ -121,25 +121,32 @@ function startRingtone(type: 'ring' | 'dial') {
 
     const playTone = () => {
       if (ctx.state === 'closed') return;
-      const osc1 = ctx.createOscillator();
-      const osc2 = ctx.createOscillator();
-      const gain = ctx.createGain();
-
-      osc1.connect(gain);
-      osc2.connect(gain);
-      gain.connect(ctx.destination);
 
       if (type === 'ring') {
-        osc1.frequency.setValueAtTime(440, ctx.currentTime);
-        osc2.frequency.setValueAtTime(480, ctx.currentTime);
-        gain.gain.setValueAtTime(0.12, ctx.currentTime);
-        gain.gain.setValueAtTime(0.12, ctx.currentTime + 1.6);
-        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.8);
-        osc1.start();
-        osc2.start();
-        osc1.stop(ctx.currentTime + 1.8);
-        osc2.stop(ctx.currentTime + 1.8);
+        const notes = [261.63, 329.63, 392.00, 493.88];
+        notes.forEach((freq, index) => {
+          const osc = ctx.createOscillator();
+          const noteGain = ctx.createGain();
+          osc.connect(noteGain);
+          noteGain.connect(ctx.destination);
+          
+          osc.frequency.setValueAtTime(freq, ctx.currentTime + index * 0.15);
+          noteGain.gain.setValueAtTime(0, ctx.currentTime);
+          noteGain.gain.linearRampToValueAtTime(0.08, ctx.currentTime + index * 0.15 + 0.05);
+          noteGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + index * 0.15 + 0.9);
+          
+          osc.start(ctx.currentTime + index * 0.15);
+          osc.stop(ctx.currentTime + index * 0.15 + 1.0);
+        });
       } else {
+        const osc1 = ctx.createOscillator();
+        const osc2 = ctx.createOscillator();
+        const gain = ctx.createGain();
+
+        osc1.connect(gain);
+        osc2.connect(gain);
+        gain.connect(ctx.destination);
+
         osc1.frequency.setValueAtTime(350, ctx.currentTime);
         osc2.frequency.setValueAtTime(440, ctx.currentTime);
         gain.gain.setValueAtTime(0.08, ctx.currentTime);

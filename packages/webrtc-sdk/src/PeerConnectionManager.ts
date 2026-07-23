@@ -45,6 +45,7 @@ export class PeerConnectionManager {
   private iceServers: RTCIceServer[];
   private statsIntervalTimer: any = null;
   private prevBytesReport: Map<string, { timestamp: number; bytes: number }> = new Map();
+  private iceCandidateQueues: Map<string, RTCIceCandidateInit[]> = new Map();
 
   constructor(signalingClient: SignalingClient, config?: PeerConnectionConfig, callbacks?: PeerConnectionCallbacks) {
     this.signalingClient = signalingClient;
@@ -188,7 +189,7 @@ export class PeerConnectionManager {
 
     const pc = new RTCPeerConnection({
       iceServers: this.iceServers,
-      bundlePolicy: 'max-bundle',
+      bundlePolicy: 'balanced',
       rtcpMuxPolicy: 'require'
     });
     this.peerConnections.set(targetSocketId, pc);
@@ -262,9 +263,25 @@ export class PeerConnectionManager {
     }
   }
 
+  private async processQueuedCandidates(senderSocketId: string) {
+    const pc = this.peerConnections.get(senderSocketId);
+    const queue = this.iceCandidateQueues.get(senderSocketId);
+    if (pc && queue && pc.remoteDescription) {
+      for (const candidate of queue) {
+        try {
+          await pc.addIceCandidate(new RTCIceCandidate(candidate));
+        } catch (e) {
+          console.error('Error adding queued ICE candidate', e);
+        }
+      }
+      this.iceCandidateQueues.delete(senderSocketId);
+    }
+  }
+
   private async handleReceivedOffer(senderSocketId: string, sdp: RTCSessionDescriptionInit) {
     const pc = await this.createPeerConnection(senderSocketId, false);
     await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+    await this.processQueuedCandidates(senderSocketId);
     let answer = await pc.createAnswer();
     answer = { type: 'answer', sdp: this.tweakSdp(answer.sdp || '') };
     await pc.setLocalDescription(answer);
@@ -275,12 +292,20 @@ export class PeerConnectionManager {
     const pc = this.peerConnections.get(senderSocketId);
     if (pc) {
       await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+      await this.processQueuedCandidates(senderSocketId);
     }
   }
 
   private async handleReceivedIceCandidate(senderSocketId: string, candidate: RTCIceCandidateInit) {
     const pc = this.peerConnections.get(senderSocketId);
     if (pc) {
+      if (!pc.remoteDescription) {
+        if (!this.iceCandidateQueues.has(senderSocketId)) {
+          this.iceCandidateQueues.set(senderSocketId, []);
+        }
+        this.iceCandidateQueues.get(senderSocketId)!.push(candidate);
+        return;
+      }
       try {
         await pc.addIceCandidate(new RTCIceCandidate(candidate));
       } catch (e) {

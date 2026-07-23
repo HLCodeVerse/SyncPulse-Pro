@@ -1,6 +1,6 @@
 import { Pool } from 'pg';
 
-const connectionString = 'postgresql://postgres.fbgwhkgvrfutahjjuwct:Chandan%409777767188@aws-0-ap-southeast-2.pooler.supabase.com:6543/postgres';
+const connectionString = 'postgresql://postgres.tqrhotxuqtfsrtyidelm:Chandan%409777767188@aws-1-ap-south-1.pooler.supabase.com:6543/postgres';
 
 let pool: Pool | null = null;
 

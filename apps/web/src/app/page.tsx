@@ -21,7 +21,8 @@ import {
   Search, Send, CheckCheck, Check, ArrowLeft, Settings, LogOut, Users, Zap,
   X, Sparkles, Hash, Edit2, Bot, Wand2, Globe2, ShieldCheck, ShieldAlert,
   Pin, File, PhoneCall, User as UserIcon, UserPlus, UserCheck, UserSearch,
-  Activity, Plus, Camera, Smile, Paperclip, Lock, Radio, Trash2, Reply, Bell
+  Activity, Plus, Camera, Smile, Paperclip, Lock, Radio, Trash2, Reply, Bell,
+  Download
 } from 'lucide-react';
 import {
   askGeminiWithThreadContext,
@@ -290,6 +291,7 @@ export default function Home() {
   const [summaryModalText, setSummaryModalText] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [activeLightboxImage, setActiveLightboxImage] = useState<string | null>(null);
 
   const [aiPolishInput, setAiPolishInput] = useState('');
   const [aiPolishOutput, setAiPolishOutput] = useState('');
@@ -1336,6 +1338,47 @@ export default function Home() {
         </div>
       )}
 
+      {activeLightboxImage && (
+        <div
+          className="fixed inset-0 bg-black/95 backdrop-blur-md z-50 flex flex-col items-center justify-center p-4 anim-fade"
+          onClick={() => setActiveLightboxImage(null)}
+        >
+          {/* Top Control Bar */}
+          <div className="absolute top-4 left-4 right-4 flex items-center justify-between z-50">
+            <span className="text-xs font-semibold text-slate-300 truncate max-w-[70%] bg-black/45 px-3.5 py-1.5 rounded-full border border-white/5 backdrop-blur-md">
+              Image Attachment
+            </span>
+            <div className="flex items-center gap-2">
+              <a
+                href={activeLightboxImage}
+                download={`attachment_${Date.now()}`}
+                onClick={(e) => e.stopPropagation()}
+                className="text-slate-400 hover:text-white p-2.5 bg-white/10 hover:bg-white/20 rounded-full transition-all border border-white/5 backdrop-blur-md hover:scale-105 active:scale-95"
+                title="Download Image"
+              >
+                <Download size={18} />
+              </a>
+              <button
+                onClick={() => setActiveLightboxImage(null)}
+                className="text-slate-400 hover:text-white p-2.5 bg-white/10 hover:bg-white/20 rounded-full transition-all border border-white/5 backdrop-blur-md hover:scale-105 active:scale-95 flex items-center justify-center"
+                title="Close"
+              >
+                <X size={18} />
+              </button>
+            </div>
+          </div>
+
+          {/* Image Container */}
+          <div className="relative max-w-5xl max-h-[85vh] w-full flex items-center justify-center anim-scale" onClick={(e) => e.stopPropagation()}>
+            <img
+              src={activeLightboxImage}
+              alt="Preview"
+              className="max-w-full max-h-[80vh] rounded-xl object-contain shadow-2xl ring-1 ring-white/10"
+            />
+          </div>
+        </div>
+      )}
+
       {incomingCall && (
         <CallModal
           caller={incomingCall.caller}
@@ -1630,7 +1673,12 @@ export default function Home() {
                               {msg.mediaUrl && (
                                 <div className="mb-2 overflow-hidden rounded-xl">
                                   {msg.mediaUrl.startsWith('data:image/') || msg.mediaUrl.match(/\.(jpeg|jpg|gif|png|webp)/i) ? (
-                                    <img src={msg.mediaUrl} alt="Attachment" className="max-w-full h-auto max-h-60 rounded-xl object-cover hover:scale-105 transition-transform duration-300 ring-1 ring-white/10" />
+                                    <img
+                                      src={msg.mediaUrl}
+                                      alt="Attachment"
+                                      className="max-w-full h-auto max-h-60 rounded-xl object-cover hover:scale-105 transition-transform duration-300 ring-1 ring-white/10 cursor-pointer"
+                                      onClick={() => msg.mediaUrl && setActiveLightboxImage(msg.mediaUrl)}
+                                    />
                                   ) : msg.mediaUrl.startsWith('data:audio/') || msg.mediaUrl.match(/\.(webm|mp3|ogg|wav|m4a)/i) ? (
                                     <div className="flex flex-col gap-1 p-2 rounded-xl bg-black/40 border border-white/5 min-w-[200px]">
                                       <span className="text-[11px] text-red-400 font-bold block mb-1">🎤 Voice Note</span>

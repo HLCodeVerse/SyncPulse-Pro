@@ -1,12 +1,19 @@
-const apiKey = process.env.NEXT_PUBLIC_GEMINI_API_KEY || '';
+function getApiKey(): string {
+  if (typeof window !== 'undefined') {
+    const userKey = localStorage.getItem('user_gemini_api_key');
+    if (userKey) return userKey;
+  }
+  return process.env.NEXT_PUBLIC_GEMINI_API_KEY || '';
+}
 
 export async function askGeminiWithThreadContext(
   userPrompt: string,
   threadContext: { sender: string; text: string }[] = [],
   systemInstruction = "You are PulseAI Assistant inside SyncPulse Pro."
 ): Promise<string> {
-  if (!apiKey) {
-    return `PulseAI Response: I received your request "${userPrompt}". (Set NEXT_PUBLIC_GEMINI_API_KEY for live output!)`;
+  const activeKey = getApiKey();
+  if (!activeKey) {
+    return `PulseAI Response: I received your request "${userPrompt}". (Please enter a valid Gemini API Key in Settings to get real answers!)`;
   }
 
   try {
@@ -17,7 +24,7 @@ export async function askGeminiWithThreadContext(
 
     const fullPrompt = `${systemInstruction}\n\nRecent Chat Context:\n${formattedHistory}\n\nCurrent Query: "${userPrompt}"\n\nProvide a helpful 1-3 sentence response:`;
 
-    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${apiKey}`, {
+    const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent?key=${activeKey}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({

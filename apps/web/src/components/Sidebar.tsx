@@ -13,10 +13,11 @@ interface SidebarProps {
   registeredUser: any;
   friendRequestsCount: number;
   handleLogout: () => void;
+  hideMobileNav?: boolean;
 }
 
 export function Sidebar({
-  screen, setScreen, setSelectedContact, registeredUser, friendRequestsCount, handleLogout
+  screen, setScreen, setSelectedContact, registeredUser, friendRequestsCount, handleLogout, hideMobileNav
 }: SidebarProps) {
   const isAdmin = registeredUser?.role === 'admin';
 
@@ -66,23 +67,25 @@ export function Sidebar({
       </aside>
 
       {/* Mobile Bottom Navigation Bar */}
-      <nav className="md:hidden flex items-center justify-around h-14 shrink-0 z-40 bg-black/95 backdrop-blur-2xl border-t border-white/10 px-2">
-        {ALL_NAV_ITEMS.map((nav) => {
-          const active = screen === nav.key;
-          return (
-            <button key={nav.key} onClick={() => { setScreen(nav.key); if (nav.key !== 'chats') setSelectedContact(null); }}
-              className={`relative flex flex-col items-center justify-center gap-0.5 px-3 py-1 rounded-xl transition-all ${active ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 'text-slate-400'}`}>
-              <nav.icon size={16} />
-              <span className="text-[9px] font-bold">{nav.label}</span>
-              {nav.badge && nav.badge > 0 ? (
-                <span className="absolute -top-1 -right-1 px-1.5 py-0.2 rounded-full text-[8px] font-extrabold bg-red-500 text-white">
-                  {nav.badge}
-                </span>
-              ) : null}
-            </button>
-          );
-        })}
-      </nav>
+      {!hideMobileNav && (
+        <nav className="md:hidden flex items-center justify-around h-14 shrink-0 z-40 bg-black/95 backdrop-blur-2xl border-t border-white/10 px-2">
+          {ALL_NAV_ITEMS.filter(item => ['chats', 'calls', 'friends', 'settings'].includes(item.key)).map((nav) => {
+            const active = screen === nav.key;
+            return (
+              <button key={nav.key} onClick={() => { setScreen(nav.key); if (nav.key !== 'chats') setSelectedContact(null); }}
+                className={`relative flex flex-col items-center justify-center gap-0.5 px-3 py-1 rounded-xl transition-all ${active ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 'text-slate-400'}`}>
+                <nav.icon size={16} />
+                <span className="text-[9px] font-bold">{nav.label}</span>
+                {nav.badge && nav.badge > 0 ? (
+                  <span className="absolute -top-1 -right-1 px-1.5 py-0.2 rounded-full text-[8px] font-extrabold bg-red-500 text-white">
+                    {nav.badge}
+                  </span>
+                ) : null}
+              </button>
+            );
+          })}
+        </nav>
+      )}
     </>
   );
 }

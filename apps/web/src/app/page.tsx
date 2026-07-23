@@ -212,6 +212,11 @@ export default function Home() {
   const [inputText, setInputText] = useState('');
   const [typingUsers, setTypingUsers] = useState<Record<string, boolean>>({});
   const [replyingTo, setReplyingTo] = useState<ChatMessage | null>(null);
+
+  const [customGeminiKey, setCustomGeminiKey] = useState('');
+  const [editName, setEditName] = useState('');
+  const [editBio, setEditBio] = useState('');
+  const [editAvatar, setEditAvatar] = useState('');
   const [editingMessage, setEditingMessage] = useState<ChatMessage | null>(null);
   const [pinnedMessage, setPinnedMessage] = useState<ChatMessage | null>(null);
   const [smartReplyChips, setSmartReplyChips] = useState<string[]>([]);
@@ -585,7 +590,18 @@ export default function Home() {
   const registeredUserRef = useRef(registeredUser);
   useEffect(() => {
     registeredUserRef.current = registeredUser;
+    if (registeredUser) {
+      setEditName(registeredUser.name || '');
+      setEditBio(registeredUser.bio || '');
+      setEditAvatar(registeredUser.avatar || '');
+    }
   }, [registeredUser]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setCustomGeminiKey(localStorage.getItem('user_gemini_api_key') || '');
+    }
+  }, []);
 
   /* Dedicated Effect to Connect and Register on Login/Session Restore */
   useEffect(() => {
@@ -608,6 +624,11 @@ export default function Home() {
       onNetworkQualityReport: (_, st) => setNetworkQuality({ quality: st.quality, rttMs: st.rttMs, bitrateKbps: st.bitrateKbps }),
     });
     pmRef.current = pm;
+
+    if (registeredUserRef.current) {
+      sig.connect();
+      sig.register(registeredUserRef.current as any);
+    }
 
     sig.on('registered', (u) => setRegisteredUser(u as any));
     sig.on('presence:update', (u) => setOnlineUsers(u));
@@ -716,6 +737,42 @@ export default function Home() {
   }, []);
 
   /* Actions */
+  const handleSaveSettings = async () => {
+    if (!registeredUser) return;
+    try {
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('user_gemini_api_key', customGeminiKey.trim());
+      }
+
+      const res = await fetch('/api/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: registeredUser.id,
+          name: editName,
+          avatar: editAvatar,
+          bio: editBio
+        })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.user) {
+          setRegisteredUser(data.user);
+          if (typeof window !== 'undefined') {
+            localStorage.setItem('syncpulse_session', JSON.stringify(data.user));
+          }
+          setBusyNotice("Settings saved successfully!");
+          setTimeout(() => setBusyNotice(null), 3000);
+        }
+      } else {
+        alert("Failed to update profile settings.");
+      }
+    } catch (e) {
+      alert("Error saving settings.");
+    }
+  };
+
   const handleLogout = () => {
     if (typeof window !== 'undefined') {
       localStorage.removeItem('syncpulse_session');
@@ -1049,9 +1106,10 @@ export default function Home() {
   const dbUsersExcludingSelf = allDbUsers.filter((u) => u.id !== registeredUser?.id && !blockedUsers.includes(u.id));
   const mergedUsers = dbUsersExcludingSelf.map(u => {
     const isOnlineViaSig = onlineUsers.some(o => o.id === u.id);
+    const dbOnlineRecent = u.status === 'online' && u.lastSeen && (Date.now() - new Date(u.lastSeen).getTime() < 10000);
     return {
       ...u,
-      status: (isOnlineViaSig || u.status === 'online') ? ('online' as const) : ('offline' as const)
+      status: (isOnlineViaSig || dbOnlineRecent) ? ('online' as const) : ('offline' as const)
     };
   });
 
@@ -1273,6 +1331,7 @@ export default function Home() {
             registeredUser={registeredUser}
             friendRequestsCount={friendRequests.length}
             handleLogout={handleLogout}
+            hideMobileNav={!!selectedContact}
           />
 
           {/* Sub-View 1: CHATS */}
@@ -1622,31 +1681,107 @@ export default function Home() {
             />
           )}
 
-          {/* Sub-View 6: PROFILE */}
-          {screen === 'profile' && (
-            <div className="flex-1 flex flex-col h-full bg-[#0d0e12] p-5">
-              <div className="matte-card p-6 max-w-md mx-auto w-full space-y-4">
-                <div className="flex items-center gap-4">
-                  <img src={registeredUser.avatar} alt="" className="w-16 h-16 rounded-full object-cover ring-2 ring-red-500" />
-                  <div>
-                    <h3 className="text-base font-bold text-white">{registeredUser.name}</h3>
-                    <p className="text-xs text-slate-400">@{registeredUser.username || 'user'}</p>
-                    <p className="text-xs text-slate-400 mt-1">{registeredUser.bio}</p>
+          {/* Unified PROFILE & SETTINGS view */}
+          {screen === 'settings' && (
+            <div className="flex-1 overflow-y-auto bg-[#0d0e12] p-4 sm:p-6 select-none pb-20">
+              <div className="max-w-md mx-auto space-y-5">
+                
+                {/* 1. Header */}
+                <div>
+                  <h2 className="text-lg font-bold text-white tracking-tight">Profile & Settings</h2>
+                  <p className="text-xs text-slate-400">Configure your user profile, app parameters, and API keys</p>
+                </div>
+
+                {/* 2. Profile Card */}
+                <div className="matte-card p-4 space-y-4 border border-white/5">
+                  <span className="text-[10px] uppercase font-bold tracking-wider text-red-400">Profile Details</span>
+                  
+                  {/* Presets List */}
+                  <div className="flex flex-col items-center gap-3">
+                    <img src={editAvatar || AVATAR_PRESETS[0]} alt="Selected Profile" className="w-20 h-20 rounded-full object-cover ring-2 ring-red-500 shadow-md" />
+                    <span className="text-[10px] text-slate-400">Select Avatar Preset</span>
+                    <div className="flex flex-wrap justify-center gap-2">
+                      {AVATAR_PRESETS.map((av) => {
+                        const active = editAvatar === av;
+                        return (
+                          <button key={av} onClick={() => setEditAvatar(av)} className={`w-9 h-9 rounded-full overflow-hidden transition-all hover:scale-110 ring-2 ${active ? 'ring-red-500 scale-105' : 'ring-transparent opacity-60 hover:opacity-100'}`}>
+                            <img src={av} alt="Preset" className="w-full h-full object-cover" />
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="space-y-2.5">
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-400 block mb-1">Display Name</label>
+                      <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} className="matte-input text-xs !py-2" placeholder="Your Display Name" />
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-400 block mb-1">Bio / Status</label>
+                      <input type="text" value={editBio} onChange={(e) => setEditBio(e.target.value)} className="matte-input text-xs !py-2" placeholder="Hey there! I am using SyncPulse Pro." />
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-400 block mb-1">Username (Display Only)</label>
+                      <input type="text" value={`@${registeredUser?.username || 'user'}`} disabled className="matte-input text-xs !py-2 opacity-50 cursor-not-allowed bg-black/40" />
+                    </div>
                   </div>
                 </div>
-                <button onClick={handleLogout} className="w-full py-2 rounded-xl text-xs bg-red-500/20 text-red-400 font-bold">Logout</button>
-              </div>
-            </div>
-          )}
 
-          {/* Sub-View 7: SETTINGS */}
-          {screen === 'settings' && (
-            <div className="flex-1 flex flex-col h-full bg-[#0d0e12] p-5 space-y-3">
-              <h2 className="text-sm font-bold text-white">Settings</h2>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                {THEMES.map((t) => (
-                  <button key={t.key} onClick={() => setTheme(t.key)} className="p-3 rounded-xl matte-card text-xs text-white text-left font-semibold">{t.label}</button>
-                ))}
+                {/* 3. API Key & Theme */}
+                <div className="matte-card p-4 space-y-4 border border-white/5">
+                  <span className="text-[10px] uppercase font-bold tracking-wider text-red-400">Gemini AI Configuration</span>
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-400 block mb-1">Gemini API Key</label>
+                    <input 
+                      type="password" 
+                      value={customGeminiKey} 
+                      onChange={(e) => setCustomGeminiKey(e.target.value)} 
+                      className="matte-input text-xs !py-2 font-mono" 
+                      placeholder={process.env.NEXT_PUBLIC_GEMINI_API_KEY ? "•••••••• (Configured via Server Environment)" : "Paste your Gemini API Key here..."} 
+                    />
+                    <p className="text-[10px] text-slate-500 mt-1.5 leading-normal">
+                      The API Key is saved locally in your browser. Get a free key from <a href="https://aistudio.google.com/" target="_blank" rel="noopener noreferrer" className="text-red-400 hover:underline">Google AI Studio</a>.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Theme Selector */}
+                <div className="matte-card p-4 space-y-3 border border-white/5">
+                  <span className="text-[10px] uppercase font-bold tracking-wider text-red-400">Application Theme</span>
+                  <div className="grid grid-cols-3 gap-2">
+                    {THEMES.map((t) => {
+                      const active = theme === t.key;
+                      return (
+                        <button key={t.key} onClick={() => setTheme(t.key)} className={`p-2.5 rounded-xl border text-center text-xs font-bold transition-all ${active ? 'bg-red-500/20 text-red-400 border-red-500/30' : 'bg-white/5 border-white/5 text-slate-400 hover:text-white'}`}>{t.label}</button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Shortcuts & Navigation */}
+                <div className="matte-card p-4 space-y-2.5 border border-white/5">
+                  <span className="text-[10px] uppercase font-bold tracking-wider text-red-400">Shortcuts</span>
+                  <button onClick={() => setScreen('ai-studio')} className="w-full py-2.5 px-3 rounded-xl bg-white/5 border border-white/5 text-xs text-left font-bold text-white hover:bg-white/10 transition-colors flex items-center justify-between">
+                    <span>Launch AI Translation Studio</span>
+                    <span className="text-slate-500">→</span>
+                  </button>
+                  {registeredUser?.role === 'admin' && (
+                    <button onClick={() => setScreen('admin')} className="w-full py-2.5 px-3 rounded-xl bg-white/5 border border-white/5 text-xs text-left font-bold text-red-400 hover:bg-white/10 transition-colors flex items-center justify-between">
+                      <span>Open Admin Dashboard</span>
+                      <span className="text-red-500/50">→</span>
+                    </button>
+                  )}
+                </div>
+
+                {/* Actions */}
+                <div className="flex flex-col gap-2 pt-2">
+                  <button onClick={handleSaveSettings} className="w-full py-2.5 rounded-xl text-xs bg-red-500 text-white font-bold hover:bg-red-600 transition-colors shadow-lg shadow-red-500/10">Save Settings</button>
+                  <button onClick={handleLogout} className="w-full py-2.5 rounded-xl text-xs bg-white/5 border border-white/10 hover:bg-red-500/10 hover:text-red-400 text-slate-400 font-bold transition-all">Logout</button>
+                </div>
+                
               </div>
             </div>
           )}

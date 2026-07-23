@@ -9,7 +9,7 @@ export async function GET(req: NextRequest) {
     await queryDb(`
       UPDATE public.users 
       SET status = 'offline' 
-      WHERE status = 'online' AND (last_seen IS NULL OR last_seen < NOW() - INTERVAL '35 seconds');
+      WHERE status = 'online' AND (last_seen IS NULL OR last_seen < NOW() - INTERVAL '10 seconds');
     `);
 
     // Fetch all users from Supabase Postgres DB sorted by online status FIRST, then last_seen DESC
@@ -37,6 +37,53 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ success: true, users });
   } catch (err: any) {
     console.error('Fetch Users Error:', err);
+    return NextResponse.json({ success: false, error: err.message }, { status: 500 });
+  }
+}
+
+export async function POST(req: NextRequest) {
+  try {
+    const body = await req.json();
+    const { userId, name, avatar, bio } = body;
+
+    if (!userId) {
+      return NextResponse.json({ success: false, error: 'Missing userId' }, { status: 400 });
+    }
+
+    await queryDb(`
+      UPDATE public.users 
+      SET full_name = COALESCE($2, full_name), 
+          avatar_url = COALESCE($3, avatar_url), 
+          bio = COALESCE($4, bio) 
+      WHERE id = $1;
+    `, [userId, name, avatar, bio]);
+
+    const rows = await queryDb(`
+      SELECT id, full_name, username, phone_number, avatar_url, bio, role, status
+      FROM public.users
+      WHERE id = $1;
+    `, [userId]);
+
+    if (!rows.length) {
+      return NextResponse.json({ success: false, error: 'User not found' }, { status: 404 });
+    }
+
+    const updatedUser = rows[0];
+    return NextResponse.json({ 
+      success: true, 
+      user: {
+        id: updatedUser.id,
+        name: updatedUser.full_name,
+        username: updatedUser.username,
+        phone: updatedUser.phone_number,
+        avatar: updatedUser.avatar_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80',
+        bio: updatedUser.bio,
+        role: updatedUser.role,
+        status: updatedUser.status === 'online' ? 'online' : 'offline'
+      }
+    });
+  } catch (err: any) {
+    console.error('Update Profile Error:', err);
     return NextResponse.json({ success: false, error: err.message }, { status: 500 });
   }
 }

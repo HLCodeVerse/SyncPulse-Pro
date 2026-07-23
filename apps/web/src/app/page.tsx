@@ -655,8 +655,7 @@ export default function Home() {
     };
 
     syncMessages();
-    const interval = setInterval(syncMessages, 3500);
-    return () => clearInterval(interval);
+    // No repeat interval polling loop for history sync to prevent database connections exhaustion
   }, [selectedContact, registeredUser]);
 
   const soundEnabledRef = useRef(soundEnabled);
@@ -1220,20 +1219,9 @@ export default function Home() {
     sendHeartbeat();
     fetchUsersAndFriendships();
 
-    const interval = setInterval(() => {
-      sendHeartbeat();
-      fetchUsersAndFriendships();
-
-      if (sigRef.current) {
-        if (!(sigRef.current as any).socket?.connected) {
-          sigRef.current.connect();
-          sigRef.current.register(registeredUser);
-        }
-      }
-    }, 10000);
+    // No repeat interval polling loops are registered to prevent database connections exhaustion
 
     return () => {
-      clearInterval(interval);
       document.removeEventListener('visibilitychange', handleVisibility);
     };
   }, [registeredUser]);

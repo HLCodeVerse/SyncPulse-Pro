@@ -58,7 +58,6 @@ export class SignalingClient {
     });
 
     this.setupListeners();
-    this.startHttpFallbackPolling();
   }
 
   private setupListeners() {
@@ -181,23 +180,7 @@ export class SignalingClient {
   }
 
   private async postServerlessSignal(type: string, targetUserId?: string, roomId?: string, payload?: any) {
-    if (typeof window === 'undefined' || !this.currentUser) return;
-    try {
-      await fetch('/api/signaling', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action: 'signal',
-          event: {
-            type,
-            targetUserId,
-            roomId,
-            senderId: this.currentUser.id,
-            payload
-          }
-        })
-      });
-    } catch (e) {}
+    // No-op: Completely disabled database polling fallback signal emission
   }
 
   public connect() {

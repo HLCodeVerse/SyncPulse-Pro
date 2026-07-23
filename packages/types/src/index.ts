@@ -90,6 +90,7 @@ export interface ClientToServerEvents {
   'chat:react': (payload: { messageId: string; targetUserId: string; emoji: string }) => void;
   'chat:edit': (payload: { messageId: string; targetUserId: string; newText: string }) => void;
   'chat:read': (payload: { targetUserId: string; messageIds: string[] }) => void;
+  'chat:typing': (payload: { targetUserId: string; isTyping: boolean }) => void;
   'call:initiate': (payload: CallInitiatePayload) => void;
   'call:accept': (payload: { roomId: string }) => void;
   'call:decline': (payload: { roomId: string }) => void;
@@ -109,6 +110,7 @@ export interface ServerToClientEvents {
   'chat:message': (message: ChatMessage) => void;
   'chat:updated': (payload: { messageId: string; message: ChatMessage }) => void;
   'chat:read_status': (payload: { messageIds: string[]; readByUserId: string }) => void;
+  'chat:typing': (payload: { senderId: string; isTyping: boolean }) => void;
   'call:incoming': (payload: { roomId: string; caller: User; isVideo: boolean; callType: CallType }) => void;
   'call:accepted': (payload: { roomId: string; callee: User }) => void;
   'call:declined': (payload: { roomId: string; calleeId: string }) => void;

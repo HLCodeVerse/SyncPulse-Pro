@@ -210,6 +210,7 @@ export default function Home() {
   // Chat & AI Context State
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [inputText, setInputText] = useState('');
+  const [typingUsers, setTypingUsers] = useState<Record<string, boolean>>({});
   const [replyingTo, setReplyingTo] = useState<ChatMessage | null>(null);
   const [editingMessage, setEditingMessage] = useState<ChatMessage | null>(null);
   const [pinnedMessage, setPinnedMessage] = useState<ChatMessage | null>(null);
@@ -231,6 +232,7 @@ export default function Home() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const recordingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   const [showAttachmentMenu, setShowAttachmentMenu] = useState(false);
   const [showCameraModal, setShowCameraModal] = useState(false);
@@ -311,6 +313,24 @@ export default function Home() {
     }
     setCameraStream(null);
     setShowCameraModal(false);
+  };
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setInputText(e.target.value);
+
+    if (!selectedContact) return;
+    const isAi = selectedContact.id === AI_BOT_USER.id;
+    if (isAi) return;
+
+    sigRef.current?.sendTypingStatus(selectedContact.id, true);
+
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+
+    typingTimeoutRef.current = setTimeout(() => {
+      sigRef.current?.sendTypingStatus(selectedContact.id, false);
+    }, 1500);
   };
 
   const capturePhoto = () => {
@@ -635,6 +655,10 @@ export default function Home() {
 
     sig.on('chat:read_status', ({ messageIds }) => {
       setChatMessages(prev => prev.map(m => messageIds.includes(m.id) ? { ...m, status: 'read' } : m));
+    });
+
+    sig.on('chat:typing', ({ senderId, isTyping }: { senderId: string; isTyping: boolean }) => {
+      setTypingUsers(prev => ({ ...prev, [senderId]: isTyping }));
     });
 
     sig.on('call:incoming', (payload) => {
@@ -1351,8 +1375,48 @@ export default function Home() {
                       const isMe = msg.sender.id === registeredUser.id;
                       const emojiOnly = isOnlyEmoji(msg.text);
 
+                      let touchStartX = 0;
+                      let pressTimer: NodeJS.Timeout;
+
+                      const handleTouchStart = (e: React.TouchEvent) => {
+                        touchStartX = e.touches[0].clientX;
+                        if (isMe && !msg.isDeleted) {
+                          pressTimer = setTimeout(() => {
+                            setEditingMessage(msg);
+                            setInputText(msg.text);
+                          }, 600);
+                        }
+                      };
+
+                      const handleTouchEnd = (e: React.TouchEvent) => {
+                        clearTimeout(pressTimer);
+                        const deltaX = e.changedTouches[0].clientX - touchStartX;
+                        if (deltaX > 75 && !msg.isDeleted) {
+                          setReplyingTo(msg);
+                        }
+                      };
+
+                      const handleTouchMove = () => {
+                        clearTimeout(pressTimer);
+                      };
+
+                      const handleContextMenu = (e: React.MouseEvent) => {
+                        if (isMe && !msg.isDeleted) {
+                          e.preventDefault();
+                          setEditingMessage(msg);
+                          setInputText(msg.text);
+                        }
+                      };
+
                       return (
-                        <div key={msg.id} className={`group relative flex ${isMe ? 'justify-end' : 'justify-start'} anim-slide-up`}>
+                        <div 
+                          key={msg.id} 
+                          onTouchStart={handleTouchStart}
+                          onTouchEnd={handleTouchEnd}
+                          onTouchMove={handleTouchMove}
+                          onContextMenu={handleContextMenu}
+                          className={`group relative flex ${isMe ? 'justify-end' : 'justify-start'} anim-slide-up select-none`}
+                        >
                           {!msg.isDeleted && (
                             <div className={`absolute -top-3.5 ${isMe ? 'right-2' : 'left-2'} hidden group-hover:flex items-center gap-1 z-30 px-2 py-0.5 rounded-full bg-slate-900 border border-white/10 shadow-lg`}>
                               {EMOJI_REACTIONS.map(r => (
@@ -1434,6 +1498,19 @@ export default function Home() {
                         </div>
                       </div>
                     )}
+
+                    {selectedContact && typingUsers[selectedContact.id] && (
+                      <div className="flex justify-start anim-slide-up">
+                        <div className="matte-card px-3.5 py-2.5 text-xs text-white rounded-2xl rounded-tl-xs flex items-center gap-2">
+                          <span className="font-bold text-red-400">{selectedContact.name} is typing</span>
+                          <div className="flex items-center gap-1.5 px-0.5">
+                            <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-bounce duration-300" style={{ animationDelay: '0ms' }} />
+                            <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-bounce duration-300" style={{ animationDelay: '150ms' }} />
+                            <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-bounce duration-300" style={{ animationDelay: '300ms' }} />
+                          </div>
+                        </div>
+                      </div>
+                    )}
                     <div ref={messagesEndRef} />
                   </div>
 
@@ -1477,7 +1554,7 @@ export default function Home() {
                           <Mic size={18} />
                         </button>
 
-                        <input type="text" value={inputText} onChange={(e) => setInputText(e.target.value)} placeholder="Type a message..." className="matte-input flex-1 !py-2 text-xs" />
+                        <input type="text" value={inputText} onChange={handleInputChange} placeholder="Type a message..." className="matte-input flex-1 !py-2 text-xs" />
                         <button type="submit" disabled={!inputText.trim()} className="app-btn app-btn-primary p-2 rounded-xl disabled:opacity-30"><Send size={15} /></button>
                       </>
                     )}

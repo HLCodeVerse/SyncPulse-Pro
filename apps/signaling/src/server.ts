@@ -201,6 +201,18 @@ io.on('connection', (socket) => {
     }
   });
 
+  // Chat Typing Indicator
+  socket.on('chat:typing', ({ targetUserId, isTyping }: { targetUserId: string; isTyping: boolean }) => {
+    const sender = socketUserMap.get(socket.id);
+    if (!sender) return;
+
+    for (const [sId, uId] of userSockets.entries()) {
+      if (uId === targetUserId && sId !== socket.id) {
+        io.to(sId).emit('chat:typing', { senderId: sender.id, isTyping });
+      }
+    }
+  });
+
   // Chat Reaction
   socket.on('chat:react', ({ messageId, targetUserId, emoji }) => {
     const user = socketUserMap.get(socket.id);

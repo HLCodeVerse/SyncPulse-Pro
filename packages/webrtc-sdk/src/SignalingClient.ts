@@ -27,6 +27,7 @@ export type EventMap = {
   'chat:message': (message: ChatMessage) => void;
   'chat:updated': (payload: { messageId: string; message: ChatMessage }) => void;
   'chat:read_status': (payload: { messageIds: string[]; readByUserId: string }) => void;
+  'chat:typing': (payload: { senderId: string; isTyping: boolean }) => void;
   'call:incoming': (payload: { roomId: string; caller: User; isVideo: boolean; callType: CallType }) => void;
   'call:accepted': (payload: { roomId: string; callee: User }) => void;
   'call:declined': (payload: { roomId: string; calleeId: string }) => void;
@@ -84,6 +85,7 @@ export class SignalingClient {
     this.socket.on('chat:message', (msg) => this.emitLocal('chat:message', msg));
     this.socket.on('chat:updated', (payload) => this.emitLocal('chat:updated', payload));
     this.socket.on('chat:read_status', (payload) => this.emitLocal('chat:read_status', payload));
+    this.socket.on('chat:typing', (payload) => this.emitLocal('chat:typing', payload));
     this.socket.on('call:incoming', (payload) => this.emitLocal('call:incoming', payload));
     this.socket.on('call:accepted', (payload) => this.emitLocal('call:accepted', payload));
     this.socket.on('call:declined', (payload) => this.emitLocal('call:declined', payload));
@@ -278,6 +280,10 @@ export class SignalingClient {
       };
       this.postServerlessSignal('chat:message', targetUserId, undefined, msg);
     }
+  }
+
+  public sendTypingStatus(targetUserId: string, isTyping: boolean) {
+    this.socket.emit('chat:typing', { targetUserId, isTyping });
   }
 
   public reactToMessage(messageId: string, targetUserId: string, emoji: string) {

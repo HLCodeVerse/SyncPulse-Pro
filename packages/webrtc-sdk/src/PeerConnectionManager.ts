@@ -95,6 +95,13 @@ export class PeerConnectionManager {
         quality = 'good';
       }
 
+      // Adaptive Bitrate/Resolution Control based on quality
+      if (quality === 'excellent' || quality === 'good') {
+        this.setVideoHD(socketId, true).catch(() => {});
+      } else {
+        this.setVideoHD(socketId, false).catch(() => {});
+      }
+
       this.callbacks.onNetworkQualityReport?.(socketId, {
         peerSocketId: socketId,
         rttMs,
@@ -145,8 +152,16 @@ export class PeerConnectionManager {
 
     try {
       this.localStream = await navigator.mediaDevices.getUserMedia({
-        audio,
-        video: video ? { width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } } : false
+        audio: audio ? {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        } : false,
+        video: video ? {
+          width: { ideal: 1920, min: 1280 },
+          height: { ideal: 1080, min: 720 },
+          frameRate: { ideal: 30, min: 24 }
+        } : false
       });
 
       this.callbacks.onLocalStream?.(this.localStream);
@@ -162,7 +177,11 @@ export class PeerConnectionManager {
       return this.peerConnections.get(targetSocketId)!;
     }
 
-    const pc = new RTCPeerConnection({ iceServers: this.iceServers });
+    const pc = new RTCPeerConnection({
+      iceServers: this.iceServers,
+      bundlePolicy: 'max-bundle',
+      rtcpMuxPolicy: 'require'
+    });
     this.peerConnections.set(targetSocketId, pc);
 
     // Add local tracks
@@ -201,7 +220,8 @@ export class PeerConnectionManager {
     };
 
     if (isInitiator) {
-      const offer = await pc.createOffer();
+      let offer = await pc.createOffer();
+      offer = { type: 'offer', sdp: this.tweakSdp(offer.sdp || '') };
       await pc.setLocalDescription(offer);
       this.signalingClient.sendOffer(targetSocketId, offer);
     }
@@ -209,10 +229,35 @@ export class PeerConnectionManager {
     return pc;
   }
 
+  private tweakSdp(sdp: string): string {
+    return sdp.replace('useinbandfec=1', 'useinbandfec=1;stereo=1;maxptime=20;minptime=10');
+  }
+
+  public async setVideoHD(socketId: string, hd: boolean) {
+    const pc = this.peerConnections.get(socketId);
+    if (!pc) return;
+    const sender = pc.getSenders().find(s => s.track?.kind === 'video');
+    if (sender) {
+      const params = sender.getParameters();
+      if (!params.encodings) {
+        params.encodings = [{}];
+      }
+      if (hd) {
+        params.encodings[0].scaleResolutionDownBy = 1.0;
+        params.encodings[0].maxBitrate = 2500000;
+      } else {
+        params.encodings[0].scaleResolutionDownBy = 2.0;
+        params.encodings[0].maxBitrate = 500000;
+      }
+      await sender.setParameters(params);
+    }
+  }
+
   private async handleReceivedOffer(senderSocketId: string, sdp: RTCSessionDescriptionInit) {
     const pc = await this.createPeerConnection(senderSocketId, false);
     await pc.setRemoteDescription(new RTCSessionDescription(sdp));
-    const answer = await pc.createAnswer();
+    let answer = await pc.createAnswer();
+    answer = { type: 'answer', sdp: this.tweakSdp(answer.sdp || '') };
     await pc.setLocalDescription(answer);
     this.signalingClient.sendAnswer(senderSocketId, answer);
   }

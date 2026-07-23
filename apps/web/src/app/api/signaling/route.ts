@@ -42,16 +42,17 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ activeUsers, events: [] });
     }
 
-    // 3. Query new signal events from Supabase signals table since timestamp
-    const sinceDate = new Date(since || now - 5000); // default to last 5s if since is empty/0
+    // 3. Query signal events from Supabase signals table
     const rows = await queryDb(`
       SELECT id, type, payload, target_user_id, room_id, sender_id, created_at
       FROM public.signals
-      WHERE created_at > $1 
-        AND (target_user_id IS NULL OR target_user_id = $2)
-        AND (sender_id != $2 OR sender_id IS NULL)
-      ORDER BY created_at ASC;
-    `, [sinceDate, userId]);
+      WHERE (target_user_id IS NULL OR target_user_id = $1)
+        AND (sender_id != $1 OR sender_id IS NULL)
+      ORDER BY created_at DESC
+      LIMIT 30;
+    `, [userId]);
+
+    rows.reverse();
 
     const events = rows.map(r => ({
       id: r.id,

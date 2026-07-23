@@ -110,8 +110,74 @@ function isOnlyEmoji(text: string): boolean {
   return emojiRegex.test(clean);
 }
 
+let ringtoneInterval: any = null;
+let ringtoneAudioContext: any = null;
+
+function startRingtone(type: 'ring' | 'dial') {
+  stopRingtone();
+  try {
+    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    ringtoneAudioContext = ctx;
+
+    const playTone = () => {
+      if (ctx.state === 'closed') return;
+      const osc1 = ctx.createOscillator();
+      const osc2 = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc1.connect(gain);
+      osc2.connect(gain);
+      gain.connect(ctx.destination);
+
+      if (type === 'ring') {
+        osc1.frequency.setValueAtTime(440, ctx.currentTime);
+        osc2.frequency.setValueAtTime(480, ctx.currentTime);
+        gain.gain.setValueAtTime(0.12, ctx.currentTime);
+        gain.gain.setValueAtTime(0.12, ctx.currentTime + 1.6);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.8);
+        osc1.start();
+        osc2.start();
+        osc1.stop(ctx.currentTime + 1.8);
+        osc2.stop(ctx.currentTime + 1.8);
+      } else {
+        osc1.frequency.setValueAtTime(350, ctx.currentTime);
+        osc2.frequency.setValueAtTime(440, ctx.currentTime);
+        gain.gain.setValueAtTime(0.08, ctx.currentTime);
+        gain.gain.setValueAtTime(0.08, ctx.currentTime + 0.8);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.0);
+        osc1.start();
+        osc2.start();
+        osc1.stop(ctx.currentTime + 1.0);
+        osc2.stop(ctx.currentTime + 1.0);
+      }
+    };
+
+    playTone();
+    const intervalDelay = type === 'ring' ? 3000 : 2000;
+    ringtoneInterval = setInterval(playTone, intervalDelay);
+  } catch (e) {
+    console.error("Ringtone playback error:", e);
+  }
+}
+
+function stopRingtone() {
+  if (ringtoneInterval) {
+    clearInterval(ringtoneInterval);
+    ringtoneInterval = null;
+  }
+  if (ringtoneAudioContext) {
+    ringtoneAudioContext.close().catch(() => {});
+    ringtoneAudioContext = null;
+  }
+}
+
 function playSound(type: 'message' | 'notification' | 'ring' | 'dial') {
   try {
+    if (type === 'ring' || type === 'dial') {
+      startRingtone(type);
+      return;
+    }
+
     const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
     const osc = ctx.createOscillator();
     const gain = ctx.createGain();
@@ -132,19 +198,6 @@ function playSound(type: 'message' | 'notification' | 'ring' | 'dial') {
       gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.2);
       osc.start();
       osc.stop(ctx.currentTime + 0.2);
-    } else if (type === 'ring') {
-      osc.frequency.setValueAtTime(440, ctx.currentTime);
-      osc.frequency.setValueAtTime(523.25, ctx.currentTime + 0.15);
-      gain.gain.setValueAtTime(0.25, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.4);
-      osc.start();
-      osc.stop(ctx.currentTime + 0.4);
-    } else if (type === 'dial') {
-      osc.frequency.setValueAtTime(350, ctx.currentTime);
-      gain.gain.setValueAtTime(0.1, ctx.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.3);
-      osc.start();
-      osc.stop(ctx.currentTime + 0.3);
     }
   } catch (e) {}
 }
@@ -181,6 +234,9 @@ export default function Home() {
   const [dbUsersList, setDbUsersList] = useState<DbUser[]>([]);
   const [dbMessagesList, setDbMessagesList] = useState<DbMessage[]>([]);
   const [adminLoading, setAdminLoading] = useState(false);
+
+  const swipeStartXRef = useRef(0);
+  const pressTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const [theme, setTheme] = useState<string>(() => {
     if (typeof window !== 'undefined') return localStorage.getItem('pulse_theme') || 'coral-dark';
@@ -730,19 +786,26 @@ export default function Home() {
     });
 
     sig.on('call:accepted', ({ roomId }) => {
+      stopRingtone();
       setOutgoingCall(null);
       setActiveRoomId(roomId);
     });
 
     sig.on('call:declined', () => {
+      stopRingtone();
       setOutgoingCall(null);
       leaveCall();
       setBusyNotice("Call was declined.");
       setTimeout(() => setBusyNotice(null), 4000);
     });
 
-    sig.on('call:ended', () => leaveCall());
+    sig.on('call:ended', () => {
+      stopRingtone();
+      leaveCall();
+    });
+    
     sig.on('call:busy', ({ message }) => {
+      stopRingtone();
       setOutgoingCall(null);
       setBusyNotice(message);
       setTimeout(() => setBusyNotice(null), 4000);
@@ -902,6 +965,7 @@ export default function Home() {
   };
 
   const acceptCall = async () => {
+    stopRingtone();
     if (!incomingCall) return;
     await pmRef.current?.acquireLocalMedia(true, incomingCall.isVideo);
     sigRef.current?.joinRoom(incomingCall.roomId, incomingCall.isVideo);
@@ -911,6 +975,7 @@ export default function Home() {
   };
 
   const declineCall = () => {
+    stopRingtone();
     if (incomingCall) {
       sigRef.current?.declineCall(incomingCall.roomId);
       setIncomingCall(null);
@@ -918,6 +983,7 @@ export default function Home() {
   };
 
   const leaveCall = () => {
+    stopRingtone();
     if (activeRoomId) {
       sigRef.current?.endCall(activeRoomId);
       sigRef.current?.leaveRoom(activeRoomId);
@@ -1414,8 +1480,8 @@ export default function Home() {
                 </div>
 
                 <div className="relative mb-3">
-                  <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Search messages & contacts..." className="matte-input !py-1.5 text-xs pl-8" />
-                  <Search size={13} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-500" />
+                  <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Search messages & contacts..." className="matte-input !py-2.5 text-sm pl-9" />
+                  <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
                 </div>
 
                 <div className="flex-1 overflow-y-auto space-y-1 pr-1">
@@ -1430,23 +1496,23 @@ export default function Home() {
                       <div key={c.id} onClick={() => setSelectedContact(c)}
                         className={`flex items-center gap-2.5 p-2.5 rounded-xl cursor-pointer transition-all ${isSel ? 'bg-white/10 border border-white/10' : 'hover:bg-white/5'}`}>
                         <div className="relative shrink-0">
-                          <img src={c.avatar} alt="" className="w-9 h-9 rounded-full object-cover ring-1 ring-white/10" />
+                          <img src={c.avatar} alt="" className="w-10 h-10 rounded-full object-cover ring-1 ring-white/10" />
                           <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full" style={{ background: isOnline ? '#30d158' : '#8e8e93', border: '2px solid #08090c' }} />
                         </div>
 
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center justify-between">
-                            <span className="text-xs font-semibold truncate text-white flex items-center gap-1">
+                            <span className="text-sm font-semibold truncate text-white flex items-center gap-1">
                               {c.name} {isAi && <AiSparkleIcon size={12} />}
                             </span>
                             {last && (
-                              <span className="text-[10px] shrink-0 font-medium text-slate-500">
+                              <span className="text-[11px] shrink-0 font-medium text-slate-500">
                                 {new Date(last.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                               </span>
                             )}
                           </div>
                           <div className="flex items-center justify-between mt-0.5">
-                            <p className="text-[11px] truncate text-slate-400 font-normal">
+                            <p className="text-xs truncate text-slate-400 font-normal">
                               {last ? (last.isDeleted ? '🚫 Message deleted' : (last.isEdited ? `${last.text} (edited)` : last.text)) : (isAi ? 'Ask PulseAI anything...' : 'Tap to open chat')}
                             </p>
                             {unread > 0 && (
@@ -1472,10 +1538,10 @@ export default function Home() {
                       </button>
                       <img src={selectedContact.avatar} alt="" className="w-8 h-8 rounded-full object-cover ring-1 ring-white/10" />
                       <div>
-                        <h4 className="text-xs font-bold text-white flex items-center gap-1">
+                        <h4 className="text-sm font-bold text-white flex items-center gap-1">
                           {selectedContact.name} {selectedContact.id === AI_BOT_USER.id && <AiSparkleIcon size={12} />}
                         </h4>
-                        <span className={`text-[10px] ${selectedContact.status === 'online' || selectedContact.id === AI_BOT_USER.id ? 'text-emerald-400' : 'text-slate-500'}`}>
+                        <span className={`text-xs ${selectedContact.status === 'online' || selectedContact.id === AI_BOT_USER.id ? 'text-emerald-400' : 'text-slate-500'}`}>
                           {selectedContact.status === 'online' || selectedContact.id === AI_BOT_USER.id ? '● Active Now' : 'Offline'}
                         </span>
                       </div>
@@ -1499,13 +1565,11 @@ export default function Home() {
                       const isMe = msg.sender.id === registeredUser.id;
                       const emojiOnly = isOnlyEmoji(msg.text);
 
-                      let touchStartX = 0;
-                      let pressTimer: NodeJS.Timeout;
-
                       const handleTouchStart = (e: React.TouchEvent) => {
-                        touchStartX = e.touches[0].clientX;
+                        swipeStartXRef.current = e.touches[0].clientX;
                         if (isMe && !msg.isDeleted) {
-                          pressTimer = setTimeout(() => {
+                          if (pressTimerRef.current) clearTimeout(pressTimerRef.current);
+                          pressTimerRef.current = setTimeout(() => {
                             setEditingMessage(msg);
                             setInputText(msg.text);
                           }, 600);
@@ -1513,15 +1577,21 @@ export default function Home() {
                       };
 
                       const handleTouchEnd = (e: React.TouchEvent) => {
-                        clearTimeout(pressTimer);
-                        const deltaX = e.changedTouches[0].clientX - touchStartX;
-                        if (deltaX > 75 && !msg.isDeleted) {
+                        if (pressTimerRef.current) {
+                          clearTimeout(pressTimerRef.current);
+                          pressTimerRef.current = null;
+                        }
+                        const deltaX = e.changedTouches[0].clientX - swipeStartXRef.current;
+                        if (deltaX > 60 && !msg.isDeleted) {
                           setReplyingTo(msg);
                         }
                       };
 
                       const handleTouchMove = () => {
-                        clearTimeout(pressTimer);
+                        if (pressTimerRef.current) {
+                          clearTimeout(pressTimerRef.current);
+                          pressTimerRef.current = null;
+                        }
                       };
 
                       const handleContextMenu = (e: React.MouseEvent) => {
@@ -1561,22 +1631,22 @@ export default function Home() {
                           {emojiOnly && !msg.mediaUrl ? (
                             <div className="text-4xl py-1">{msg.text}</div>
                           ) : (
-                            <div className={`max-w-[80%] md:max-w-[65%] px-3.5 py-2 text-xs leading-relaxed ${isMe ? 'bg-red-500 text-white rounded-2xl rounded-tr-xs' : 'matte-card text-white rounded-2xl rounded-tl-xs'}`}>
+                            <div className={`max-w-[85%] md:max-w-[65%] px-3.5 py-2.5 text-sm leading-relaxed ${isMe ? 'bg-red-500 text-white rounded-2xl rounded-tr-xs' : 'matte-card text-white rounded-2xl rounded-tl-xs'}`}>
                               {msg.mediaUrl && (
                                 <div className="mb-2 overflow-hidden rounded-xl">
                                   {msg.mediaUrl.startsWith('data:image/') || msg.mediaUrl.match(/\.(jpeg|jpg|gif|png|webp)/i) ? (
                                     <img src={msg.mediaUrl} alt="Attachment" className="max-w-full h-auto max-h-60 rounded-xl object-cover hover:scale-105 transition-transform duration-300 ring-1 ring-white/10" />
                                   ) : msg.mediaUrl.startsWith('data:audio/') || msg.mediaUrl.match(/\.(webm|mp3|ogg|wav|m4a)/i) ? (
                                     <div className="flex flex-col gap-1 p-2 rounded-xl bg-black/40 border border-white/5 min-w-[200px]">
-                                      <span className="text-[10px] text-red-400 font-bold block mb-1">🎤 Voice Note</span>
+                                      <span className="text-[11px] text-red-400 font-bold block mb-1">🎤 Voice Note</span>
                                       <audio src={msg.mediaUrl} controls className="w-full h-8 accent-red-500 outline-none" />
                                     </div>
                                   ) : (
                                     <a href={msg.mediaUrl} download={`attachment_${msg.id}`} className="flex items-center gap-2 p-2.5 rounded-xl bg-white/5 border border-white/10 hover:bg-white/10 transition-colors">
                                       <Paperclip size={14} className="text-red-400" />
                                       <div className="text-left min-w-0">
-                                        <p className="text-[11px] font-bold text-white truncate">{msg.text || 'Download File'}</p>
-                                        <span className="text-[9px] text-slate-500 font-medium">Click to download</span>
+                                        <p className="text-[12px] font-bold text-white truncate">{msg.text || 'Download File'}</p>
+                                        <span className="text-[10px] text-slate-500 font-medium">Click to download</span>
                                       </div>
                                     </a>
                                   )}
@@ -1588,7 +1658,7 @@ export default function Home() {
                               )}
 
                               {msg.aiAnnotation && (
-                                <div className="mt-1.5 pt-1.5 border-t border-white/10 text-[10px] text-red-300 flex flex-col gap-0.5">
+                                <div className="mt-1.5 pt-1.5 border-t border-white/10 text-[11px] text-red-300 flex flex-col gap-0.5">
                                   <span className="font-bold flex items-center gap-1"><Sparkles size={10} /> AI Sparkle Help:</span>
                                   <p className="whitespace-pre-line">{msg.aiAnnotation}</p>
                                 </div>
@@ -1597,14 +1667,14 @@ export default function Home() {
                               {msg.reactions && msg.reactions.length > 0 && (
                                 <div className="flex gap-1 mt-1 flex-wrap">
                                   {msg.reactions.map((r, i) => (
-                                    <span key={i} className="text-[10px] px-1.5 py-0.2 rounded-full bg-black/30 border border-white/10 text-white">
+                                    <span key={i} className="text-[11px] px-1.5 py-0.2 rounded-full bg-black/30 border border-white/10 text-white">
                                       {r.emoji}
                                     </span>
                                   ))}
                                 </div>
                               )}
 
-                              <div className={`flex items-center justify-end gap-1 mt-1 text-[9px] ${isMe ? 'text-red-100' : 'text-slate-500'}`}>
+                              <div className={`flex items-center justify-end gap-1 mt-1 text-[10px] ${isMe ? 'text-red-100' : 'text-slate-500'}`}>
                                 {msg.isEdited && <span className="italic mr-0.5">(edited)</span>}
                                 <span>{new Date(msg.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                                 {isMe && <AnimatedReadTickIcon status={msg.status} size={14} />}
@@ -1617,7 +1687,7 @@ export default function Home() {
 
                     {isAiThinking && (
                       <div className="flex justify-start">
-                        <div className="matte-card px-3 py-2 text-xs text-red-400 flex items-center gap-1.5">
+                        <div className="matte-card px-3.5 py-2.5 text-sm text-red-400 flex items-center gap-1.5">
                           <AiSparkleIcon size={14} className="animate-spin" /> PulseAI is thinking...
                         </div>
                       </div>
@@ -1678,8 +1748,8 @@ export default function Home() {
                           <Mic size={18} />
                         </button>
 
-                        <input type="text" value={inputText} onChange={handleInputChange} placeholder="Type a message..." className="matte-input flex-1 !py-2 text-xs" />
-                        <button type="submit" disabled={!inputText.trim()} className="app-btn app-btn-primary p-2 rounded-xl disabled:opacity-30"><Send size={15} /></button>
+                        <input type="text" value={inputText} onChange={handleInputChange} placeholder="Type a message..." className="matte-input flex-1 !py-2.5 text-sm" />
+                        <button type="submit" disabled={!inputText.trim()} className="app-btn app-btn-primary p-2.5 rounded-xl disabled:opacity-30"><Send size={16} /></button>
                       </>
                     )}
                   </form>

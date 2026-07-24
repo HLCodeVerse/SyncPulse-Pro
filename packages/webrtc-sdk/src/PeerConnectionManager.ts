@@ -166,17 +166,27 @@ export class PeerConnectionManager {
           autoGainControl: true
         } : false,
         video: video ? {
-          width: { ideal: 1920, min: 1280 },
-          height: { ideal: 1080, min: 720 },
-          frameRate: { ideal: 30, min: 24 }
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+          frameRate: { ideal: 30 }
         } : false
       });
 
       this.callbacks.onLocalStream?.(this.localStream);
       return this.localStream;
     } catch (err) {
-      console.error('Failed to get local user media', err);
-      throw err;
+      console.warn('Advanced constraints failed, falling back to basic media constraints...', err);
+      try {
+        this.localStream = await navigator.mediaDevices.getUserMedia({
+          audio: !!audio,
+          video: !!video
+        });
+        this.callbacks.onLocalStream?.(this.localStream);
+        return this.localStream;
+      } catch (fallbackErr) {
+        console.error('Failed to get local user media', fallbackErr);
+        throw fallbackErr;
+      }
     }
   }
 
@@ -238,7 +248,7 @@ export class PeerConnectionManager {
   }
 
   private tweakSdp(sdp: string): string {
-    return sdp.replace('useinbandfec=1', 'useinbandfec=1;stereo=1;maxptime=20;minptime=10');
+    return sdp;
   }
 
   public async setVideoHD(socketId: string, hd: boolean) {

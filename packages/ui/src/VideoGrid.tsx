@@ -24,13 +24,22 @@ export const VideoTile: React.FC<VideoTileProps> = ({
   onToggleFlash
 }) => {
   const videoRef = useRef<HTMLVideoElement>(null);
+  const audioRef = useRef<HTMLAudioElement>(null);
   const [flashOn, setFlashOn] = useState(false);
 
   useEffect(() => {
     if (videoRef.current && stream) {
       videoRef.current.srcObject = stream;
+      videoRef.current.play().catch(() => {});
     }
-  }, [stream]);
+  }, [stream, videoMuted]);
+
+  useEffect(() => {
+    if (audioRef.current && stream && !isLocal) {
+      audioRef.current.srcObject = stream;
+      audioRef.current.play().catch(() => {});
+    }
+  }, [stream, isLocal]);
 
   const handlePiP = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -57,6 +66,14 @@ export const VideoTile: React.FC<VideoTileProps> = ({
 
   return (
     <div className="relative w-full h-full min-h-[180px] bg-slate-900 rounded-2xl overflow-hidden shadow-2xl border border-slate-800 flex items-center justify-center group">
+      {!isLocal && stream && (
+        <audio
+          ref={audioRef}
+          autoPlay
+          playsInline
+        />
+      )}
+
       {stream && !videoMuted ? (
         <video
           ref={videoRef}

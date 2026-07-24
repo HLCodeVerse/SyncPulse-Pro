@@ -9,6 +9,7 @@ export type PeerConnectionCallbacks = {
   onRemoteStream?: (peerSocketId: string, stream: MediaStream) => void;
   onPeerLeft?: (peerSocketId: string) => void;
   onIceConnectionStateChange?: (peerSocketId: string, state: RTCIceConnectionState) => void;
+  onConnectionStateChange?: (peerSocketId: string, state: RTCPeerConnectionState) => void;
   onNetworkQualityReport?: (peerSocketId: string, stats: NetworkQualityStats) => void;
 };
 
@@ -25,7 +26,16 @@ const DEFAULT_ICE_SERVERS: RTCIceServer[] = [
   { urls: 'stun:stun1.l.google.com:19302' },
   { urls: 'stun:stun2.l.google.com:19302' },
   { urls: 'stun:stun3.l.google.com:19302' },
-  { urls: 'stun:stun4.l.google.com:19302' }
+  { urls: 'stun:stun4.l.google.com:19302' },
+  {
+    urls: [
+      'turn:openrelay.metered.ca:80',
+      'turn:openrelay.metered.ca:443',
+      'turn:openrelay.metered.ca:443?transport=tcp'
+    ],
+    username: 'openrelayproject',
+    credential: 'openrelayproject'
+  }
 ];
 
 export class PeerConnectionManager {
@@ -127,6 +137,7 @@ export class PeerConnectionManager {
     if (!pc) return;
 
     try {
+      console.log(`[WebRTC Peer ${targetSocketId}] Triggering ICE restart offer...`);
       const offer = await pc.createOffer({ iceRestart: true });
       await pc.setLocalDescription(offer);
       this.signalingClient.sendOffer(targetSocketId, offer);
@@ -209,6 +220,7 @@ export class PeerConnectionManager {
       return this.peerConnections.get(targetSocketId)!;
     }
 
+    console.log(`[WebRTC Peer ${targetSocketId}] Initializing RTCPeerConnection (isInitiator=${isInitiator})`);
     const pc = new RTCPeerConnection({
       iceServers: this.iceServers,
       bundlePolicy: 'balanced',
@@ -216,33 +228,72 @@ export class PeerConnectionManager {
     });
     this.peerConnections.set(targetSocketId, pc);
 
-    // Add local tracks
+    // Add local tracks BEFORE offer creation
     if (this.localStream) {
       this.localStream.getTracks().forEach((track) => {
+        console.log(`[WebRTC Peer ${targetSocketId}] Adding local track kind=${track.kind}, id=${track.id}`);
         pc.addTrack(track, this.localStream!);
       });
     }
 
+    // Connection state changes
+    pc.onconnectionstatechange = () => {
+      console.log(`[WebRTC Peer ${targetSocketId}] connectionState -> ${pc.connectionState}`);
+      this.callbacks.onConnectionStateChange?.(targetSocketId, pc.connectionState);
+
+      if (pc.connectionState === 'failed' || pc.connectionState === 'disconnected') {
+        console.warn(`[WebRTC Peer ${targetSocketId}] connectionState ${pc.connectionState}. Triggering ICE restart...`);
+        this.restartIce(targetSocketId).catch(() => {});
+      }
+    };
+
+    pc.oniceconnectionstatechange = () => {
+      console.log(`[WebRTC Peer ${targetSocketId}] iceConnectionState -> ${pc.iceConnectionState}`);
+      this.callbacks.onIceConnectionStateChange?.(targetSocketId, pc.iceConnectionState);
+
+      if (pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'disconnected') {
+        console.warn(`[WebRTC Peer ${targetSocketId}] iceConnectionState ${pc.iceConnectionState}. Triggering ICE restart...`);
+        this.restartIce(targetSocketId).catch(() => {});
+      }
+    };
+
+    pc.onicegatheringstatechange = () => {
+      console.log(`[WebRTC Peer ${targetSocketId}] iceGatheringState -> ${pc.iceGatheringState}`);
+    };
+
     // ICE Candidates
     pc.onicecandidate = (event) => {
       if (event.candidate) {
+        const type = event.candidate.type || (event.candidate.candidate.match(/typ (\w+)/)?.[1] || 'unknown');
+        console.log(`[WebRTC Peer ${targetSocketId}] Generated local ICE candidate: type=${type}, protocol=${event.candidate.protocol}, address=${event.candidate.address}`);
         this.signalingClient.sendIceCandidate(targetSocketId, event.candidate.toJSON());
       }
     };
 
-    // Connection state changes
-    pc.oniceconnectionstatechange = () => {
-      this.callbacks.onIceConnectionStateChange?.(targetSocketId, pc.iceConnectionState);
+    // Renegotiation needed
+    pc.onnegotiationneeded = async () => {
+      console.log(`[WebRTC Peer ${targetSocketId}] Negotiation needed. SignalingState=${pc.signalingState}`);
+      try {
+        if (pc.signalingState === 'stable' && isInitiator) {
+          const offer = await pc.createOffer();
+          await pc.setLocalDescription(offer);
+          this.signalingClient.sendOffer(targetSocketId, offer);
+        }
+      } catch (err) {
+        console.error(`[WebRTC Peer ${targetSocketId}] Error during renegotiation:`, err);
+      }
     };
 
     // Remote tracks
     pc.ontrack = (event) => {
+      console.log(`[WebRTC Peer ${targetSocketId}] Received remote track kind=${event.track.kind}, id=${event.track.id}`);
       let remoteStream = this.remoteStreams.get(targetSocketId);
       if (!remoteStream) {
         remoteStream = new MediaStream();
         this.remoteStreams.set(targetSocketId, remoteStream);
       }
-      event.streams[0].getTracks().forEach((track) => {
+      const incomingStream = event.streams[0] || new MediaStream([event.track]);
+      incomingStream.getTracks().forEach((track) => {
         if (!remoteStream!.getTracks().some((t) => t.id === track.id)) {
           remoteStream!.addTrack(track);
         }
@@ -252,6 +303,7 @@ export class PeerConnectionManager {
     };
 
     if (isInitiator) {
+      console.log(`[WebRTC Peer ${targetSocketId}] Creating SDP offer...`);
       let offer = await pc.createOffer();
       offer = { type: 'offer', sdp: this.tweakSdp(offer.sdp || '') };
       await pc.setLocalDescription(offer);
@@ -289,11 +341,12 @@ export class PeerConnectionManager {
     const pc = this.peerConnections.get(senderSocketId);
     const queue = this.iceCandidateQueues.get(senderSocketId);
     if (pc && queue && pc.remoteDescription) {
+      console.log(`[WebRTC Peer ${senderSocketId}] Flushing ${queue.length} queued ICE candidates...`);
       for (const candidate of queue) {
         try {
           await pc.addIceCandidate(new RTCIceCandidate(candidate));
         } catch (e) {
-          console.error('Error adding queued ICE candidate', e);
+          console.error(`[WebRTC Peer ${senderSocketId}] Error adding queued ICE candidate:`, e);
         }
       }
       this.iceCandidateQueues.delete(senderSocketId);
@@ -301,6 +354,7 @@ export class PeerConnectionManager {
   }
 
   private async handleReceivedOffer(senderSocketId: string, sdp: RTCSessionDescriptionInit) {
+    console.log(`[WebRTC Peer ${senderSocketId}] Received SDP offer`);
     const pc = await this.createPeerConnection(senderSocketId, false);
     await pc.setRemoteDescription(new RTCSessionDescription(sdp));
     await this.processQueuedCandidates(senderSocketId);
@@ -311,6 +365,7 @@ export class PeerConnectionManager {
   }
 
   private async handleReceivedAnswer(senderSocketId: string, sdp: RTCSessionDescriptionInit) {
+    console.log(`[WebRTC Peer ${senderSocketId}] Received SDP answer`);
     const pc = this.peerConnections.get(senderSocketId);
     if (pc) {
       await pc.setRemoteDescription(new RTCSessionDescription(sdp));
@@ -320,8 +375,11 @@ export class PeerConnectionManager {
 
   private async handleReceivedIceCandidate(senderSocketId: string, candidate: RTCIceCandidateInit) {
     const pc = this.peerConnections.get(senderSocketId);
+    const candidateType = candidate.candidate ? (candidate.candidate.match(/typ (\w+)/)?.[1] || 'unknown') : 'null';
+    console.log(`[WebRTC Peer ${senderSocketId}] Received remote ICE candidate type=${candidateType}`);
     if (pc) {
       if (!pc.remoteDescription) {
+        console.log(`[WebRTC Peer ${senderSocketId}] Remote description not set yet. Queueing candidate.`);
         if (!this.iceCandidateQueues.has(senderSocketId)) {
           this.iceCandidateQueues.set(senderSocketId, []);
         }
@@ -331,7 +389,7 @@ export class PeerConnectionManager {
       try {
         await pc.addIceCandidate(new RTCIceCandidate(candidate));
       } catch (e) {
-        console.error('Error adding ICE candidate', e);
+        console.error(`[WebRTC Peer ${senderSocketId}] Error adding ICE candidate:`, e);
       }
     }
   }

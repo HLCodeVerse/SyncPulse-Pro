@@ -271,6 +271,7 @@ export default function Home() {
   // Calling & Dialing States
   const [incomingCall, setIncomingCall] = useState<{ roomId: string; caller: User; isVideo: boolean; callType: CallType } | null>(null);
   const [outgoingCall, setOutgoingCall] = useState<{ target: User; isVideo: boolean; roomId: string } | null>(null);
+  const [mediaConnectionState, setMediaConnectionState] = useState<'connecting' | 'connected' | 'disconnected' | 'failed'>('connecting');
   const [busyNotice, setBusyNotice] = useState<string | null>(null);
   // Chat & AI Context State
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
@@ -718,6 +719,7 @@ export default function Home() {
       onLocalStream: (s) => setLocalStream(s),
       onRemoteStream: (id, s) => setRemoteStreams((p) => new Map(p).set(id, s)),
       onPeerLeft: (id) => setRemoteStreams((p) => { const n = new Map(p); n.delete(id); return n; }),
+      onConnectionStateChange: (_, st) => setMediaConnectionState(st as any),
       onNetworkQualityReport: (_, st) => setNetworkQuality({ quality: st.quality, rttMs: st.rttMs, bitrateKbps: st.bitrateKbps }),
     });
     pmRef.current = pm;
@@ -1425,8 +1427,16 @@ export default function Home() {
         <div className="h-full w-full flex flex-col relative z-40 bg-black">
           <div className="absolute top-3 left-3 right-3 z-30 flex items-center justify-between pointer-events-none">
             <div className="pointer-events-auto flex items-center gap-2 px-3 py-1.5 rounded-xl matte-card">
-              <span className="w-2.5 h-2.5 rounded-full bg-emerald-400" />
-              <span className="text-xs font-bold text-white">{activeRoomId}</span>
+              <span className={`w-2.5 h-2.5 rounded-full ${
+                mediaConnectionState === 'connected' ? 'bg-emerald-400' :
+                mediaConnectionState === 'connecting' ? 'bg-yellow-400 animate-pulse' :
+                'bg-red-500 animate-pulse'
+              }`} />
+              <span className="text-xs font-bold text-white">
+                {mediaConnectionState === 'connected' ? '● Media Connected (Encrypted)' :
+                 mediaConnectionState === 'connecting' ? 'Connecting media...' :
+                 'Reconnecting media...'}
+              </span>
               <button onClick={() => setShowInviteModal(true)} className="ml-2 app-btn app-btn-primary px-2.5 py-1 text-[10px] font-bold">
                 <UserPlus size={12} /> Invite
               </button>

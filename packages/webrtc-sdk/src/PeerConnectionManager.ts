@@ -184,6 +184,20 @@ export class PeerConnectionManager {
         this.callbacks.onLocalStream?.(this.localStream);
         return this.localStream;
       } catch (fallbackErr) {
+        if (video) {
+          console.warn('Camera not detected or busy on PC. Falling back gracefully to Audio-Only call mode...');
+          try {
+            this.localStream = await navigator.mediaDevices.getUserMedia({
+              audio: true,
+              video: false
+            });
+            this.callbacks.onLocalStream?.(this.localStream);
+            return this.localStream;
+          } catch (audioErr) {
+            console.error('Failed to acquire microphone media', audioErr);
+            throw audioErr;
+          }
+        }
         console.error('Failed to get local user media', fallbackErr);
         throw fallbackErr;
       }

@@ -81,6 +81,7 @@ export const VideoTile: React.FC<VideoTileProps> = ({
           playsInline
           muted={isLocal}
           className={`w-full h-full object-cover ${isLocal ? 'scale-x-[-1]' : ''}`}
+          style={{ transform: isLocal ? 'scaleX(-1)' : 'none' }}
         />
       ) : (
         <div className="flex flex-col items-center justify-center space-y-3">
@@ -317,13 +318,68 @@ export const VideoGrid: React.FC<VideoGridProps> = ({
     );
   }
 
-  // Normal Grid Layout
+  // 1:1 Call Layout (2 Members Total: Remote Participant in Main Hero Spotlight + Floating Local PiP Card)
+  if (participants.length === 1) {
+    const remotePeer = participants[0];
+    const remoteStream = remoteStreams.get(remotePeer.socketId);
+
+    const isLocalHero = spotlightId === 'local';
+    const heroStream = isLocalHero ? localStream : remoteStream;
+    const heroName = isLocalHero ? localUser.name : remotePeer.user.name;
+    const heroAvatar = isLocalHero ? localUser.avatar : remotePeer.user.avatar;
+    const heroIsLocal = isLocalHero;
+    const heroAudioMuted = isLocalHero ? !localMediaState.audio : !remotePeer.mediaState.audio;
+    const heroVideoMuted = isLocalHero ? !localMediaState.video : !remotePeer.mediaState.video;
+
+    const pipStream = isLocalHero ? remoteStream : localStream;
+    const pipName = isLocalHero ? remotePeer.user.name : localUser.name;
+    const pipAvatar = isLocalHero ? remotePeer.user.avatar : localUser.avatar;
+    const pipIsLocal = !isLocalHero;
+    const pipAudioMuted = isLocalHero ? !remotePeer.mediaState.audio : !localMediaState.audio;
+    const pipVideoMuted = isLocalHero ? !remotePeer.mediaState.video : !localMediaState.video;
+
+    return (
+      <div className="relative w-full h-full p-3 md:p-4 flex items-center justify-center max-w-6xl mx-auto">
+        {/* Main Hero Spotlight Stage */}
+        <div className="w-full h-full flex-1 rounded-3xl overflow-hidden shadow-2xl border border-indigo-500/20 relative">
+          <VideoTile
+            stream={heroStream}
+            participantName={heroName}
+            avatar={heroAvatar}
+            isLocal={heroIsLocal}
+            audioMuted={heroAudioMuted}
+            videoMuted={heroVideoMuted}
+            onSwitchCamera={heroIsLocal ? onSwitchCamera : undefined}
+            onToggleFlash={heroIsLocal ? onToggleFlash : undefined}
+          />
+        </div>
+
+        {/* Floating Corner Picture-in-Picture Preview Card */}
+        <div 
+          onClick={() => setSpotlightId(isLocalHero ? null : 'local')}
+          className="absolute bottom-6 right-6 z-40 w-36 h-48 sm:w-44 sm:h-56 md:w-52 md:h-64 rounded-2xl overflow-hidden shadow-2xl border-2 border-white/20 hover:border-indigo-400 hover:scale-105 transition-all cursor-pointer group"
+          title="Click to swap view"
+        >
+          <VideoTile
+            stream={pipStream}
+            participantName={pipName}
+            avatar={pipAvatar}
+            isLocal={pipIsLocal}
+            audioMuted={pipAudioMuted}
+            videoMuted={pipVideoMuted}
+            onSwitchCamera={pipIsLocal ? onSwitchCamera : undefined}
+            onToggleFlash={pipIsLocal ? onToggleFlash : undefined}
+          />
+        </div>
+      </div>
+    );
+  }
+
+  // Group Grid Layout (3+ Members)
   const totalPeers = participants.length;
   const gridColsClass =
     totalPeers <= 0
       ? 'grid-cols-1 max-w-4xl'
-      : totalPeers === 1
-      ? 'grid-cols-1 md:grid-cols-2 max-w-5xl'
       : 'grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 max-w-7xl';
 
   return (

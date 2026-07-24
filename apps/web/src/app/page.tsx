@@ -244,6 +244,7 @@ export default function Home() {
   const [adminLoading, setAdminLoading] = useState(false);
 
   const swipeStartXRef = useRef(0);
+  const swipeStartYRef = useRef(0);
   const pressTimerRef = useRef<NodeJS.Timeout | null>(null);
 
   const [theme, setTheme] = useState<string>(() => {
@@ -1616,6 +1617,7 @@ export default function Home() {
 
                       const handleTouchStart = (e: React.TouchEvent) => {
                         swipeStartXRef.current = e.touches[0].clientX;
+                        swipeStartYRef.current = e.touches[0].clientY;
                         if (isMe && !msg.isDeleted) {
                           if (pressTimerRef.current) clearTimeout(pressTimerRef.current);
                           pressTimerRef.current = setTimeout(() => {
@@ -1631,7 +1633,8 @@ export default function Home() {
                           pressTimerRef.current = null;
                         }
                         const deltaX = e.changedTouches[0].clientX - swipeStartXRef.current;
-                        if (deltaX > 60 && !msg.isDeleted) {
+                        const deltaY = e.changedTouches[0].clientY - swipeStartYRef.current;
+                        if (Math.abs(deltaX) > 25 && Math.abs(deltaY) < 50 && !msg.isDeleted) {
                           setReplyingTo(msg);
                         }
                       };
@@ -1658,7 +1661,8 @@ export default function Home() {
                           onTouchEnd={handleTouchEnd}
                           onTouchMove={handleTouchMove}
                           onContextMenu={handleContextMenu}
-                          className={`group relative flex ${isMe ? 'justify-end' : 'justify-start'} anim-slide-up select-none`}
+                          onDoubleClick={() => !msg.isDeleted && setReplyingTo(msg)}
+                          className={`group relative flex ${isMe ? 'justify-end' : 'justify-start'} anim-slide-up select-none cursor-pointer`}
                         >
                           {!msg.isDeleted && (
                             <div className={`absolute -top-3.5 ${isMe ? 'right-2' : 'left-2'} hidden group-hover:flex items-center gap-1 z-30 px-2 py-0.5 rounded-full bg-slate-900 border border-white/10 shadow-lg`}>

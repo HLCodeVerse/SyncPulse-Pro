@@ -657,7 +657,11 @@ export default function Home() {
     };
 
     syncMessages();
-    // No repeat interval polling loop for history sync to prevent database connections exhaustion
+    const threadInterval = setInterval(syncMessages, 2500);
+
+    return () => {
+      clearInterval(threadInterval);
+    };
   }, [selectedContact, registeredUser]);
 
   const soundEnabledRef = useRef(soundEnabled);
@@ -1224,9 +1228,13 @@ export default function Home() {
     sendHeartbeat();
     fetchUsersAndFriendships();
 
-    // No repeat interval polling loops are registered to prevent database connections exhaustion
+    const presenceInterval = setInterval(() => {
+      sendHeartbeat();
+      fetchUsersAndFriendships();
+    }, 3000);
 
     return () => {
+      clearInterval(presenceInterval);
       document.removeEventListener('visibilitychange', handleVisibility);
     };
   }, [registeredUser]);

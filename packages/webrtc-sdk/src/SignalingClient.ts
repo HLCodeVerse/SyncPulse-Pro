@@ -63,6 +63,7 @@ export class SignalingClient {
     });
 
     this.setupListeners();
+    this.startHttpFallbackPolling();
   }
 
   private setupListeners() {
@@ -100,7 +101,33 @@ export class SignalingClient {
   }
 
   private startHttpFallbackPolling() {
-    // Disabled HTTP fallback polling to ensure zero network overhead and pure instant WebSocket signaling
+    if (typeof window === 'undefined') return;
+    if (this.pollInterval) clearInterval(this.pollInterval);
+    this.pollInterval = setInterval(async () => {
+      if (!this.currentUser) return;
+      try {
+        const url = `/api/signaling?userId=${encodeURIComponent(this.currentUser.id)}&since=${this.lastPollTime}`;
+        const res = await fetch(url);
+        if (res.ok) {
+          const data = await res.json();
+          if (data.timestamp) this.lastPollTime = data.timestamp - 100;
+          if (Array.isArray(data.activeUsers)) {
+            this.emitLocal('presence:update', data.activeUsers);
+          }
+          if (Array.isArray(data.events)) {
+            for (const evt of data.events) {
+              if (this.processedEventIds.has(evt.id)) continue;
+              this.processedEventIds.add(evt.id);
+              if (this.processedEventIds.size > 1000) {
+                const first = Array.from(this.processedEventIds)[0];
+                this.processedEventIds.delete(first);
+              }
+              this.handleServerlessEvent(evt);
+            }
+          }
+        }
+      } catch (e) {}
+    }, 1500);
   }
 
   private handleServerlessEvent(evt: { type: string; payload: any; senderId?: string }) {
@@ -160,7 +187,23 @@ export class SignalingClient {
   }
 
   private async postServerlessSignal(type: string, targetUserId?: string, roomId?: string, payload?: any) {
-    // No-op: Completely disabled database polling fallback signal emission
+    if (typeof window === 'undefined' || !this.currentUser) return;
+    try {
+      await fetch('/api/signaling', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'signal',
+          event: {
+            type,
+            targetUserId,
+            roomId,
+            senderId: this.currentUser.id,
+            payload
+          }
+        })
+      });
+    } catch (e) {}
   }
 
   public connect() {

@@ -54,12 +54,13 @@ export class SignalingClient {
   constructor(options: SignalingClientOptions) {
     this.socket = io(options.url, {
       autoConnect: options.autoConnect ?? false,
-      transports: ['websocket', 'polling'],
+      transports: ['polling', 'websocket'],
+      upgrade: true,
       reconnection: true,
       reconnectionAttempts: Infinity,
-      reconnectionDelay: 200,
-      reconnectionDelayMax: 1000,
-      timeout: 3000
+      reconnectionDelay: 500,
+      reconnectionDelayMax: 2000,
+      timeout: 5000
     });
 
     this.setupListeners();
@@ -68,7 +69,12 @@ export class SignalingClient {
 
   private setupListeners() {
     this.socket.on('connect', () => {
+      console.log('Signaling socket connected via', this.socket.io.engine.transport.name);
       this.emitLocal('connected');
+    });
+
+    this.socket.on('connect_error', (err) => {
+      console.warn('Signaling socket connection fallback (using HTTP serverless mode):', err.message);
     });
 
     this.socket.on('disconnect', (reason) => {

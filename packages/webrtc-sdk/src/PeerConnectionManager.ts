@@ -356,20 +356,44 @@ export class PeerConnectionManager {
   private async handleReceivedOffer(senderSocketId: string, sdp: RTCSessionDescriptionInit) {
     console.log(`[WebRTC Peer ${senderSocketId}] Received SDP offer`);
     const pc = await this.createPeerConnection(senderSocketId, false);
-    await pc.setRemoteDescription(new RTCSessionDescription(sdp));
-    await this.processQueuedCandidates(senderSocketId);
-    let answer = await pc.createAnswer();
-    answer = { type: 'answer', sdp: this.tweakSdp(answer.sdp || '') };
-    await pc.setLocalDescription(answer);
-    this.signalingClient.sendAnswer(senderSocketId, answer);
+
+    // Guard against offer collision / invalid state
+    if (pc.signalingState !== 'stable' && pc.signalingState !== 'have-remote-offer') {
+      console.warn(`[WebRTC Peer ${senderSocketId}] Offer received in signalingState=${pc.signalingState}. Attempting polite rollback...`);
+      try {
+        await pc.setLocalDescription({ type: 'rollback' });
+      } catch (e) {
+        console.warn(`[WebRTC Peer ${senderSocketId}] Rollback skipped or failed:`, e);
+      }
+    }
+
+    try {
+      await pc.setRemoteDescription(new RTCSessionDescription(sdp));
+      await this.processQueuedCandidates(senderSocketId);
+      let answer = await pc.createAnswer();
+      answer = { type: 'answer', sdp: this.tweakSdp(answer.sdp || '') };
+      await pc.setLocalDescription(answer);
+      this.signalingClient.sendAnswer(senderSocketId, answer);
+    } catch (err) {
+      console.error(`[WebRTC Peer ${senderSocketId}] Error handling SDP offer:`, err);
+    }
   }
 
   private async handleReceivedAnswer(senderSocketId: string, sdp: RTCSessionDescriptionInit) {
     console.log(`[WebRTC Peer ${senderSocketId}] Received SDP answer`);
     const pc = this.peerConnections.get(senderSocketId);
-    if (pc) {
+    if (!pc) return;
+
+    if (pc.signalingState !== 'have-local-offer') {
+      console.warn(`[WebRTC Peer ${senderSocketId}] Ignoring duplicate or unexpected SDP answer in signalingState=${pc.signalingState}`);
+      return;
+    }
+
+    try {
       await pc.setRemoteDescription(new RTCSessionDescription(sdp));
       await this.processQueuedCandidates(senderSocketId);
+    } catch (err) {
+      console.error(`[WebRTC Peer ${senderSocketId}] Error setting remote SDP answer:`, err);
     }
   }
 

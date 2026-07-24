@@ -24,15 +24,8 @@ const DEFAULT_ICE_SERVERS: RTCIceServer[] = [
   { urls: 'stun:stun.l.google.com:19302' },
   { urls: 'stun:stun1.l.google.com:19302' },
   { urls: 'stun:stun2.l.google.com:19302' },
-  {
-    urls: [
-      'turn:openrelay.metered.ca:80',
-      'turn:openrelay.metered.ca:443',
-      'turn:openrelay.metered.ca:443?transport=tcp'
-    ],
-    username: 'openrelayproject',
-    credential: 'openrelayproject'
-  }
+  { urls: 'stun:stun3.l.google.com:19302' },
+  { urls: 'stun:stun4.l.google.com:19302' }
 ];
 
 export class PeerConnectionManager {
@@ -46,6 +39,7 @@ export class PeerConnectionManager {
   private statsIntervalTimer: any = null;
   private prevBytesReport: Map<string, { timestamp: number; bytes: number }> = new Map();
   private iceCandidateQueues: Map<string, RTCIceCandidateInit[]> = new Map();
+  private lastQualityState: Map<string, 'excellent' | 'good' | 'poor' | 'bad'> = new Map();
 
   constructor(signalingClient: SignalingClient, config?: PeerConnectionConfig, callbacks?: PeerConnectionCallbacks) {
     this.signalingClient = signalingClient;
@@ -105,11 +99,15 @@ export class PeerConnectionManager {
         quality = 'good';
       }
 
-      // Adaptive Bitrate/Resolution Control based on quality
-      if (quality === 'excellent' || quality === 'good') {
-        this.setVideoHD(socketId, true).catch(() => {});
-      } else {
-        this.setVideoHD(socketId, false).catch(() => {});
+      // Adaptive Bitrate/Resolution Control: Only trigger setVideoHD when quality state actually changes
+      const prevQuality = this.lastQualityState.get(socketId);
+      if (prevQuality !== quality) {
+        this.lastQualityState.set(socketId, quality);
+        if (quality === 'excellent' || quality === 'good') {
+          this.setVideoHD(socketId, true).catch(() => {});
+        } else {
+          this.setVideoHD(socketId, false).catch(() => {});
+        }
       }
 
       this.callbacks.onNetworkQualityReport?.(socketId, {

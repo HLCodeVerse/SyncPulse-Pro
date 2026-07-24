@@ -25,7 +25,10 @@ const io = new SocketIOServer<ClientToServerEvents, ServerToClientEvents>(fastif
   cors: {
     origin: '*',
     methods: ['GET', 'POST']
-  }
+  },
+  pingInterval: 5000,
+  pingTimeout: 3000,
+  transports: ['websocket', 'polling']
 });
 
 // Socket Authentication Middleware

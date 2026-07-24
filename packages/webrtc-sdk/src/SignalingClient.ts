@@ -54,7 +54,12 @@ export class SignalingClient {
   constructor(options: SignalingClientOptions) {
     this.socket = io(options.url, {
       autoConnect: options.autoConnect ?? false,
-      transports: ['websocket', 'polling']
+      transports: ['websocket', 'polling'],
+      reconnection: true,
+      reconnectionAttempts: Infinity,
+      reconnectionDelay: 200,
+      reconnectionDelayMax: 1000,
+      timeout: 3000
     });
 
     this.setupListeners();
@@ -95,32 +100,7 @@ export class SignalingClient {
   }
 
   private startHttpFallbackPolling() {
-    if (typeof window === 'undefined') return;
-    this.pollInterval = setInterval(async () => {
-      if (!this.currentUser) return;
-      try {
-        const url = `/api/signaling?userId=${encodeURIComponent(this.currentUser.id)}&since=${this.lastPollTime}`;
-        const res = await fetch(url);
-        if (res.ok) {
-          const data = await res.json();
-          if (data.timestamp) this.lastPollTime = data.timestamp - 100;
-          if (Array.isArray(data.activeUsers)) {
-            this.emitLocal('presence:update', data.activeUsers);
-          }
-          if (Array.isArray(data.events)) {
-            for (const evt of data.events) {
-              if (this.processedEventIds.has(evt.id)) continue;
-              this.processedEventIds.add(evt.id);
-              if (this.processedEventIds.size > 1000) {
-                const first = Array.from(this.processedEventIds)[0];
-                this.processedEventIds.delete(first);
-              }
-              this.handleServerlessEvent(evt);
-            }
-          }
-        }
-      } catch (e) {}
-    }, 2000);
+    // Disabled HTTP fallback polling to ensure zero network overhead and pure instant WebSocket signaling
   }
 
   private handleServerlessEvent(evt: { type: string; payload: any; senderId?: string }) {

@@ -735,22 +735,25 @@ export default function Home() {
     sig.on('room:user-left', ({ socketId }) => setParticipants((prev) => prev.filter((p) => p.socketId !== socketId)));
 
     sig.on('chat:message', (msg) => {
+      const isSelf = registeredUserRef.current?.id === msg.sender.id;
       const isCurrentChat = selectedContactRef.current?.id === msg.sender.id;
       const statusUpdate = isCurrentChat ? 'read' : 'delivered';
 
       setChatMessages((prev) => {
         if (prev.some(m => m.id === msg.id)) return prev;
-        return [...prev, { ...msg, status: statusUpdate }];
+        return [...prev, { ...msg, status: isSelf ? 'sent' : statusUpdate }];
       });
 
-      fetch('/api/messages', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messageIds: [msg.id], status: statusUpdate })
-      }).catch(() => {});
+      if (!isSelf) {
+        fetch('/api/messages', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ messageIds: [msg.id], status: statusUpdate })
+        }).catch(() => {});
 
-      if (isCurrentChat) {
-        sig.markMessagesRead(msg.sender.id, [msg.id]);
+        if (isCurrentChat) {
+          sig.markMessagesRead(msg.sender.id, [msg.id]);
+        }
       }
 
       if (activeRoomIdRef.current) {
@@ -758,7 +761,7 @@ export default function Home() {
         setTimeout(() => setInCallChatToast(null), 4000);
       }
 
-      if (soundEnabledRef.current) playSound('message');
+      if (soundEnabledRef.current && !isSelf) playSound('message');
     });
 
     sig.on('chat:updated', ({ messageId, message }) => {
